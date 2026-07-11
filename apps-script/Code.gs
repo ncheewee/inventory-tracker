@@ -414,20 +414,34 @@ function sendWeeklyReport() {
 }
 
 /* ════════════════════════════════════════════════════════════
+   CHECK CONFIG — verify keys are stored
+   ════════════════════════════════════════════════════════════ */
+
+function checkConfig() {
+  var p = PropertiesService.getScriptProperties().getProperties();
+  Logger.log('GEMINI_API_KEY: ' + (p.GEMINI_API_KEY ? '✅ set (' + p.GEMINI_API_KEY.substring(0, 8) + '...)' : '❌ missing'));
+  Logger.log('TELEGRAM_BOT_TOKEN: ' + (p.TELEGRAM_BOT_TOKEN ? '✅ set (' + p.TELEGRAM_BOT_TOKEN.substring(0, 8) + '...)' : '❌ missing'));
+  Logger.log('TELEGRAM_CHAT_ID: ' + (p.TELEGRAM_CHAT_ID ? '✅ set (' + p.TELEGRAM_CHAT_ID + ')' : '❌ missing'));
+  Logger.log('\nIf any are missing, go to:\nProject Settings (⚙️) → Script properties → Edit script properties');
+}
+
+/* ════════════════════════════════════════════════════════════
    SETUP — run once
    ════════════════════════════════════════════════════════════ */
 
 function setup() {
-  // Store config in PropertiesService (more secure than code)
-  // EDIT THESE VALUES, then run setup() once:
+  // Config is read from Script Properties (Project Settings → Script properties).
+  // Set them there directly, OR paste below and run setup() to store them.
+  // Recommended: enter via Project Settings UI — no code edit needed.
   var config = {
-    GEMINI_API_KEY:     'PASTE_YOUR_GEMINI_KEY',
-    TELEGRAM_BOT_TOKEN: 'PASTE_YOUR_BOT_TOKEN',
-    TELEGRAM_CHAT_ID:   'PASTE_YOUR_CHAT_ID',
+    GEMINI_API_KEY:     '',  // e.g. 'AIzaSy...'
+    TELEGRAM_BOT_TOKEN: '',  // e.g. '123456:ABC-DEF...'
+    TELEGRAM_CHAT_ID:   '',  // e.g. '123456789'
   };
   var props = PropertiesService.getScriptProperties();
   for (var key in config) {
-    if (config[key] && config[key] !== 'PASTE_YOUR_' + key.split('_').slice(0,2).join('_')) {
+    // Only store if a real value is provided (skip blanks)
+    if (config[key]) {
       props.setProperty(key, config[key]);
     }
   }
