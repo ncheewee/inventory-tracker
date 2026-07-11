@@ -384,7 +384,7 @@
 
 // Set this to your Apps Script Web App URL after deploy.
 // Leave empty to run in DEMO MODE (mock data, no backend).
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzBymdppXnpTSNhaoc6wVkFUzeJmyOYEJVD5KNQ-zLdw-MYzm65OrUHA65qEy6Vxurx0A/exec';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 
 // Low stock threshold for warnings
 const LOW_STOCK_THRESHOLD = 20;
@@ -429,9 +429,13 @@ const isDemo = !APPS_SCRIPT_URL;
 
 async function api(action, payload = {}) {
   if (isDemo) return mockApi(action, payload);
+  // Apps Script web apps: use text/plain to avoid CORS preflight,
+  // and follow the 302 redirect to googleusercontent.com automatically.
   const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify({ action, ...payload }),
+    redirect: 'follow',
   });
   if (!res.ok) throw new Error('Network error: ' + res.status);
   return res.json();
