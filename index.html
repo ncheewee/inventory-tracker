@@ -977,6 +977,10 @@ window.addEventListener('beforeunload', stopCamera);
 
 // Prevent number input scroll hijacking
 document.getElementById('qtyInput').addEventListener('wheel', e => e.preventDefault());
+
+// ── Init on page load ──
+// Hide demo banner immediately if backend is connected (showScreen() not called on initial load)
+document.getElementById('demoBanner').style.display = isDemo ? 'block' : 'none';
 </script>
 </body>
 </html>
