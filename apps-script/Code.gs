@@ -1,13 +1,13 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  INVENTORY TRACKER — Google Apps Script Backend
- *  Bound to a Google Sheet with tabs: users, transactions, inventory
+ *  INVENTORY TRACKER — Google Apps Script Backend  (v1.2.0)
+ *  Bound to a Google Sheet with tabs: users, transactions, catalogue
  * ═══════════════════════════════════════════════════════════════
  *
  *  SETUP (see Setup.md for full guide):
- *  1. Create Google Sheet with 3 tabs (users, transactions, inventory).
+ *  1. Create Google Sheet with 3 tabs (users, transactions, catalogue).
  *  2. Extensions → Apps Script → paste this file.
- *  3. Run `setup()` once to store config + create weekly trigger.
+ *  3. Run `setup()` once to store config + create weekly trigger + seed data.
  *  4. Deploy → New deployment → Web app → access: Anyone.
  *  5. Paste deployment URL into index.html  APPS_SCRIPT_URL.
  */
@@ -23,10 +23,11 @@ var DRIVE_FOLDER_NAME  = 'InventoryTrackerPhotos';
 /* ── Sheet column indexes (0-based) ── */
 // users:        id, name, pin, role, active
 // transactions: ts, user, type, item, qty, notes, photo_url, gemini_raw
-// inventory:    item, current_qty, last_updated
+// catalogue:    item_name, category, unit, min_qty, current_qty, last_updated
+//   (catalogue replaces the old 'inventory' tab — it IS the master item list + stock levels)
 
 function doGet(e) {
-  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running.' });
+  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.2.0' });
 }
 
 function doPost(e) {
@@ -40,7 +41,7 @@ function doPost(e) {
       case 'users':       result = handleUsers(body); break;
       case 'ocr':         result = handleOCR(body); break;
       case 'transaction': result = handleTransaction(body); break;
-      case 'inventory':   result = handleInventory(body); break;
+      case 'catalogue':   result = handleCatalogue(body); break;
       case 'log':         result = handleLog(body); break;
       case 'report':      result = handleReport(body); break;
       default:            result = { ok: false, error: 'Unknown action: ' + action };
@@ -74,9 +75,12 @@ function handleLogin(body) {
    ════════════════════════════════════════════════════════════ */
 
 function handleUsers(body) {
-  // Only admins can manage users — caller must pass their pin for verification
-  if (!verifyAdmin(body.pin)) {
-    return { ok: false, error: 'Admin access required' };
+  // Listing users is available to any logged-in user
+  // Mutations (add/delete) require admin pin
+  if (body.op === 'add' || body.op === 'delete') {
+    if (!verifyAdmin(body.pin)) {
+      return { ok: false, error: 'Admin access required' };
+    }
   }
 
   if (body.op === 'add') {
@@ -102,7 +106,7 @@ function handleUsers(body) {
     return { ok: false, error: 'User not found' };
   }
 
-  // Default: list users (without exposing pins to non-admins — but admin sees all)
+  // Default: list users
   return { ok: true, users: getAllUsers() };
 }
 
@@ -135,13 +139,20 @@ function handleOCR(body) {
   var apiKey = getProp('GEMINI_API_KEY') || GEMINI_API_KEY;
   if (!apiKey) return { ok: false, error: 'Gemini API key not configured' };
 
+  // Pass the catalogue item list to Gemini so it can match known items
+  var catItems = getAllCatalogueItems().map(function(c) { return c.item_name; });
+  var knownItemsHint = catItems.length > 0
+    ? ' Known items in this inventory (try to match if possible): ' + catItems.join(', ') + '.'
+    : '';
+
   var model = GEMINI_MODEL;
   var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
 
-  var prompt = 'You are an inventory assistant. Look at this photo of a stock item or box. ' +
-    'Identify: 1) The item type/name (be concise, e.g. "A4 Paper Ream 80gsm"). ' +
+  var prompt = 'You are an inventory assistant for a CCTV installation project. ' +
+    'Look at this photo of a stock item or box. ' +
+    'Identify: 1) The item type/name (be concise, e.g. "Cable Trunking 25x25mm"). ' +
     '2) The quantity if visible on the label/packaging (if a pack says "24 pcs", quantity is 24). ' +
-    'If quantity is not visible, default to 1. ' +
+    'If quantity is not visible, default to 1.' + knownItemsHint + ' ' +
     'Respond ONLY with valid JSON: {"item":"...","qty":number}';
 
   var payload = {
@@ -172,7 +183,6 @@ function handleOCR(body) {
     var text = json.candidates[0].content.parts[0].text;
     var parsed;
     try {
-      // Gemini may return JSON with markdown fences
       text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
       parsed = JSON.parse(text);
     } catch (e) {
@@ -186,7 +196,7 @@ function handleOCR(body) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   TRANSACTION — save + photo + Telegram
+   TRANSACTION — save + photo + Telegram + update catalogue stock
    ════════════════════════════════════════════════════════════ */
 
 function handleTransaction(body) {
@@ -209,8 +219,8 @@ function handleTransaction(body) {
     body.notes || '', photoUrl, ''
   ]);
 
-  // Update inventory
-  updateInventory(body.item, parseInt(body.qty), body.type, ts);
+  // Update catalogue stock levels
+  updateCatalogueStock(body.item, parseInt(body.qty), body.type, ts);
 
   // Send Telegram notification
   var telegramSent = false;
@@ -228,21 +238,149 @@ function handleTransaction(body) {
   };
 }
 
-function updateInventory(item, qty, type, ts) {
-  var sheet = getSheet('inventory');
+function updateCatalogueStock(item, qty, type, ts) {
+  var sheet = getSheet('catalogue');
   var data = sheet.getDataRange().getValues();
   var delta = (type === 'in') ? qty : -qty;
 
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]).trim() === String(item).trim()) {
-      var newQty = Number(data[i][1]) + delta;
-      sheet.getRange(i + 1, 2).setValue(newQty);
-      sheet.getRange(i + 1, 3).setValue(ts);
+      var newQty = Number(data[i][4]) + delta;
+      sheet.getRange(i + 1, 5).setValue(newQty);  // current_qty col
+      sheet.getRange(i + 1, 6).setValue(ts);       // last_updated col
       return;
     }
   }
-  // New item
-  sheet.appendRow([item, delta, ts]);
+  // Item not in catalogue — create a basic entry (can be enriched later by admin)
+  sheet.appendRow([item, 'Uncategorized', 'pcs', LOW_STOCK_THRESHOLD, delta, ts]);
+}
+
+/* ════════════════════════════════════════════════════════════
+   CATALOGUE — master item list + stock levels + import + add
+   ════════════════════════════════════════════════════════════ */
+
+function handleCatalogue(body) {
+  // Listing is available to any logged-in user (needed for item picker)
+  // Mutations (add/import/delete) require admin pin
+
+  if (body.op === 'add') {
+    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Admin access required' };
+    return addCatalogueItem(body);
+  }
+
+  if (body.op === 'import') {
+    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Admin access required' };
+    return importCatalogue(body);
+  }
+
+  if (body.op === 'delete') {
+    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Admin access required' };
+    return deleteCatalogueItem(body);
+  }
+
+  // Default: list all catalogue items
+  return { ok: true, catalogue: getAllCatalogueItems() };
+}
+
+function getAllCatalogueItems() {
+  var sheet = getSheet('catalogue');
+  var data = sheet.getDataRange().getValues();
+  var items = [];
+  for (var i = 1; i < data.length; i++) {
+    items.push({
+      item_name: data[i][0],
+      category: data[i][1],
+      unit: data[i][2],
+      min_qty: Number(data[i][3]),
+      current_qty: Number(data[i][4]),
+      last_updated: data[i][5]
+    });
+  }
+  return items;
+}
+
+function addCatalogueItem(body) {
+  if (!body.item_name) return { ok: false, error: 'Item name required' };
+
+  var sheet = getSheet('catalogue');
+  var data = sheet.getDataRange().getValues();
+
+  // Check for duplicate
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === String(body.item_name).trim()) {
+      return { ok: false, error: 'Item already exists in catalogue' };
+    }
+  }
+
+  var ts = new Date().toISOString();
+  sheet.appendRow([
+    body.item_name,
+    body.category || 'Uncategorized',
+    body.unit || 'pcs',
+    body.min_qty != null ? Number(body.min_qty) : LOW_STOCK_THRESHOLD,
+    body.current_qty != null ? Number(body.current_qty) : 0,
+    ts
+  ]);
+  return { ok: true };
+}
+
+function deleteCatalogueItem(body) {
+  var sheet = getSheet('catalogue');
+  var data = sheet.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][0]).trim() === String(body.item_name).trim()) {
+      sheet.deleteRow(i + 1);
+      return { ok: true };
+    }
+  }
+  return { ok: false, error: 'Item not found' };
+}
+
+function importCatalogue(body) {
+  // body.items = array of {item_name, category, unit, min_qty, current_qty}
+  if (!body.items || !body.items.length) return { ok: false, error: 'No items to import' };
+
+  var sheet = getSheet('catalogue');
+  var data = sheet.getDataRange().getValues();
+  var existing = {};
+  for (var i = 1; i < data.length; i++) {
+    existing[String(data[i][0]).trim()] = i + 1; // row number
+  }
+
+  var added = 0, updated = 0;
+  var ts = new Date().toISOString();
+
+  body.items.forEach(function(item) {
+    if (!item.item_name) return;
+    var row = existing[String(item.item_name).trim()];
+    var rowData = [
+      item.item_name,
+      item.category || 'Uncategorized',
+      item.unit || 'pcs',
+      item.min_qty != null ? Number(item.min_qty) : LOW_STOCK_THRESHOLD,
+      item.current_qty != null ? Number(item.current_qty) : 0,
+      ts
+    ];
+    if (row) {
+      // Update existing — but don't overwrite current_qty if not provided
+      var newQty = item.current_qty != null ? Number(item.current_qty) : Number(data[row - 1][4]);
+      sheet.getRange(row, 1, 1, 6).setValues([[
+        item.item_name,
+        item.category || data[row - 1][1] || 'Uncategorized',
+        item.unit || data[row - 1][2] || 'pcs',
+        item.min_qty != null ? Number(item.min_qty) : Number(data[row - 1][3]),
+        newQty,
+        ts
+      ]]);
+      updated++;
+    } else {
+      sheet.appendRow(rowData);
+      existing[String(item.item_name).trim()] = sheet.getLastRow();
+      added++;
+    }
+  });
+
+  return { ok: true, added: added, updated: updated, total: body.items.length };
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -302,18 +440,8 @@ function sendTelegram(token, chatId, text) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   INVENTORY & LOG QUERIES
+   LOG QUERIES
    ════════════════════════════════════════════════════════════ */
-
-function handleInventory() {
-  var sheet = getSheet('inventory');
-  var data = sheet.getDataRange().getValues();
-  var inv = [];
-  for (var i = 1; i < data.length; i++) {
-    inv.push({ item: data[i][0], current_qty: Number(data[i][1]), last_updated: data[i][2] });
-  }
-  return { ok: true, inventory: inv };
-}
 
 function handleLog() {
   var sheet = getSheet('transactions');
@@ -369,17 +497,16 @@ function generateWeeklyReport() {
   weekTx.forEach(function(t) { byUser[t.user] = (byUser[t.user] || 0) + 1; });
   var userLines = Object.keys(byUser).map(function(u) { return u + ' (' + byUser[u] + ')'; }).join(', ');
 
-  // Current inventory levels
-  var invSheet = getSheet('inventory');
-  var invData = invSheet.getDataRange().getValues();
+  // Current catalogue levels
+  var catItems = getAllCatalogueItems();
   var invLines = [];
   var lowStock = [];
-  for (var j = 1; j < invData.length; j++) {
-    var item = invData[j][0];
-    var qty = Number(invData[j][1]);
-    invLines.push('• ' + item + ': ' + qty);
-    if (qty <= LOW_STOCK_THRESHOLD) lowStock.push('• ' + item + ' (' + qty + ' left)');
-  }
+  catItems.forEach(function(c) {
+    invLines.push('• ' + c.item_name + ': ' + c.current_qty + ' ' + (c.unit || ''));
+    // Use item's own min_qty if set, otherwise global threshold
+    var threshold = c.min_qty != null ? Number(c.min_qty) : LOW_STOCK_THRESHOLD;
+    if (c.current_qty <= threshold) lowStock.push('• ' + c.item_name + ' (' + c.current_qty + ' ' + (c.unit||'') + ' left)');
+  });
 
   var periodStart = Utilities.formatDate(weekAgo, tz, 'd MMM');
   var periodEnd = Utilities.formatDate(now, tz, 'd MMM yyyy');
@@ -404,7 +531,6 @@ function generateWeeklyReport() {
    ════════════════════════════════════════════════════════════ */
 
 function sendWeeklyReport() {
-  // Called by time-driven trigger
   var msg = generateWeeklyReport();
   var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
   var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
@@ -432,15 +558,13 @@ function checkConfig() {
 function setup() {
   // Config is read from Script Properties (Project Settings → Script properties).
   // Set them there directly, OR paste below and run setup() to store them.
-  // Recommended: enter via Project Settings UI — no code edit needed.
   var config = {
-    GEMINI_API_KEY:     '',  // e.g. 'AIzaSy...'
-    TELEGRAM_BOT_TOKEN: '',  // e.g. '123456:ABC-DEF...'
-    TELEGRAM_CHAT_ID:   '',  // e.g. '123456789'
+    GEMINI_API_KEY:     '',
+    TELEGRAM_BOT_TOKEN: '',
+    TELEGRAM_CHAT_ID:   '',
   };
   var props = PropertiesService.getScriptProperties();
   for (var key in config) {
-    // Only store if a real value is provided (skip blanks)
     if (config[key]) {
       props.setProperty(key, config[key]);
     }
@@ -455,6 +579,13 @@ function setup() {
     getSheet('users').appendRow([1, 'Admin', '9999', 'admin', true]);
     getSheet('users').appendRow([2, 'Worker', '1234', 'worker', true]);
     Logger.log('Seeded default users: Admin/9999, Worker/1234');
+  }
+
+  // Seed CCTV catalogue if empty
+  var cat = getAllCatalogueItems();
+  if (cat.length === 0) {
+    seedCCTVCatalogue();
+    Logger.log('Seeded CCTV project catalogue (5 items)');
   }
 
   // Create weekly trigger (Monday 9am) — remove old triggers first
@@ -475,6 +606,19 @@ function setup() {
   Logger.log('Next step: Deploy → New deployment → Web app → Access: Anyone');
 }
 
+function seedCCTVCatalogue() {
+  var sheet = getSheet('catalogue');
+  var ts = new Date().toISOString();
+  var items = [
+    ['Cable Trunking 25x25mm White', 'Trunking', 'm',    50,  200, ts],
+    ['Cable Trunking 50x50mm White', 'Trunking', 'm',    30,  120, ts],
+    ['RG59 Coaxial Cable 100m Roll', 'Cable',    'roll', 5,   18,  ts],
+    ['CCTV Camera Dome 4MP',         'Camera',   'pcs',  10,  45,  ts],
+    ['Power Supply 12V 10A',         'Power',    'pcs',  5,   8,   ts],
+  ];
+  items.forEach(function(row) { sheet.appendRow(row); });
+}
+
 /* ════════════════════════════════════════════════════════════
    HELPERS
    ════════════════════════════════════════════════════════════ */
@@ -492,14 +636,20 @@ function getSheet(name) {
 function initSheetHeaders() {
   initSheetHeadersFor(getSheet('users'), 'users');
   initSheetHeadersFor(getSheet('transactions'), 'transactions');
-  initSheetHeadersFor(getSheet('inventory'), 'inventory');
+  initSheetHeadersFor(getSheet('catalogue'), 'catalogue');
+  // Migrate old 'inventory' tab if it exists → rename to 'catalogue'
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var oldInv = ss.getSheetByName('inventory');
+  if (oldInv) {
+    Logger.log('Note: Old "inventory" tab found. Catalogue is the new master. You can delete the old tab.');
+  }
 }
 
 function initSheetHeadersFor(sheet, name) {
   var headers = {
     users:        ['id', 'name', 'pin', 'role', 'active'],
     transactions: ['ts', 'user', 'type', 'item', 'qty', 'notes', 'photo_url', 'gemini_raw'],
-    inventory:    ['item', 'current_qty', 'last_updated']
+    catalogue:    ['item_name', 'category', 'unit', 'min_qty', 'current_qty', 'last_updated']
   };
   sheet.getRange(1, 1, 1, headers[name].length).setValues([headers[name]]);
   sheet.setFrozenRows(1);

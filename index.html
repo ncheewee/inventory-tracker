@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>📦 Inventory Tracker</title>
+
+<!-- PWA -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Inventory">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+
 <style>
   /* ── Reset & base ── */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -37,9 +47,7 @@
   }
   .topbar h1 { font-size: 18px; font-weight: 700; }
   .topbar .user-chip { font-size: 14px; color: var(--muted); }
-  .topbar .logout-btn {
-    background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px;
-  }
+  .topbar .logout-btn { background: none; border: none; font-size: 20px; cursor: pointer; padding: 4px 8px; }
 
   /* ── Headings ── */
   .screen-title { font-size: 22px; font-weight: 700; text-align: center; margin-bottom: 4px; }
@@ -50,10 +58,7 @@
 
   /* ── PIN pad ── */
   .pin-dots { display: flex; justify-content: center; gap: 16px; margin: 20px 0 28px; }
-  .pin-dot {
-    width: 18px; height: 18px; border-radius: 50%;
-    border: 2px solid var(--border); transition: all 0.15s;
-  }
+  .pin-dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); transition: all 0.15s; }
   .pin-dot.filled { background: var(--blue); border-color: var(--blue); }
   .numpad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 320px; margin: 0 auto; }
   .numpad button {
@@ -77,13 +82,10 @@
   .action-card .sub { font-size: 13px; color: var(--muted); }
   .action-card.in { border-top: 4px solid var(--green); }
   .action-card.out { border-top: 4px solid var(--red); }
-
   .today-count { text-align: center; color: var(--muted); font-size: 14px; margin-top: auto; padding-top: 20px; }
 
   /* ── Camera ── */
-  .camera-wrap {
-    flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-  }
+  .camera-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
   #cameraVideo, #captureCanvas {
     width: 100%; max-width: 400px; border-radius: var(--radius); background: #000;
     aspect-ratio: 4/3; object-fit: cover; box-shadow: var(--shadow);
@@ -98,23 +100,17 @@
   .camera-hint { font-size: 14px; color: var(--muted); text-align: center; max-width: 280px; }
 
   /* ── Verify form ── */
-  .photo-thumb {
-    width: 100%; max-width: 320px; margin: 0 auto 20px; border-radius: 12px;
-    box-shadow: var(--shadow); display: block;
-  }
+  .photo-thumb { width: 100%; max-width: 320px; margin: 0 auto 20px; border-radius: 12px; box-shadow: var(--shadow); display: block; }
   .field { margin-bottom: 20px; }
   .field label { display: block; font-size: 14px; font-weight: 600; margin-bottom: 6px; }
-  .field input, .field textarea {
+  .field input, .field textarea, .field select {
     width: 100%; padding: 14px; border: 2px solid var(--border); border-radius: 12px;
     font-size: 18px; font-family: inherit; background: var(--card);
   }
-  .field input:focus, .field textarea:focus { outline: none; border-color: var(--blue); }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: var(--blue); }
   .qty-row { display: flex; align-items: center; gap: 12px; }
   .qty-row input { width: 90px; text-align: center; font-size: 24px; font-weight: 700; }
-  .stepper {
-    width: 52px; height: 52px; border: none; border-radius: 12px; background: var(--bg);
-    font-size: 26px; font-weight: 700; cursor: pointer; color: var(--text);
-  }
+  .stepper { width: 52px; height: 52px; border: none; border-radius: 12px; background: var(--bg); font-size: 26px; font-weight: 700; cursor: pointer; color: var(--text); }
   .stepper:active { background: var(--border); }
 
   /* ── Buttons ── */
@@ -136,18 +132,12 @@
     display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
   }
   .overlay.active { display: flex; }
-  .overlay .spin {
-    width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.3);
-    border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;
-  }
+  .overlay .spin { width: 48px; height: 48px; border: 4px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
   .overlay .msg { color: white; font-size: 16px; font-weight: 600; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ── Success screen ── */
-  .success-card {
-    background: var(--card); border-radius: var(--radius); padding: 32px 24px;
-    text-align: center; box-shadow: var(--shadow); margin: 20px 0;
-  }
+  .success-card { background: var(--card); border-radius: var(--radius); padding: 32px 24px; text-align: center; box-shadow: var(--shadow); margin: 20px 0; }
   .success-card .check { font-size: 64px; margin-bottom: 12px; }
   .success-card h2 { font-size: 20px; margin-bottom: 16px; }
   .success-detail { font-size: 16px; line-height: 1.8; color: var(--text); }
@@ -188,23 +178,40 @@
   .role-badge.worker { background: #dbeafe; color: #1e40af; }
   .user-row .del-btn { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--red); padding: 4px; }
 
-  .add-user-form { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px; }
-  .add-user-form .field { margin-bottom: 12px; }
-  .add-user-form select { width: 100%; padding: 12px; border: 2px solid var(--border); border-radius: 10px; font-size: 16px; background: var(--card); }
+  .add-user-form, .add-item-form { background: var(--card); border-radius: 12px; padding: 16px; box-shadow: var(--shadow); margin-bottom: 16px; }
+  .add-user-form .field, .add-item-form .field { margin-bottom: 12px; }
 
-  .back-btn {
-    background: none; border: none; font-size: 22px; cursor: pointer; padding: 4px 8px; color: var(--blue);
-  }
+  .back-btn { background: none; border: none; font-size: 22px; cursor: pointer; padding: 4px 8px; color: var(--blue); }
   .section-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 
   .badge { display: inline-block; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; }
   .badge.low { background: #fee2e2; color: #991b1b; }
   .badge.ok { background: #dcfce7; color: #166534; }
 
-  .demo-banner {
-    background: var(--amber); color: #78350f; text-align: center; padding: 6px;
-    font-size: 12px; font-weight: 600;
+  .demo-banner { background: var(--amber); color: #78350f; text-align: center; padding: 6px; font-size: 12px; font-weight: 600; }
+
+  /* ── Catalogue item picker (datalist wrapper) ── */
+  .picker-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Import box ── */
+  .import-box {
+    background: var(--card); border-radius: 12px; padding: 16px; box-shadow: var(--shadow);
+    margin-bottom: 16px; text-align: center;
   }
+  .import-box input[type="file"] { display: none; }
+  .import-box label {
+    display: inline-block; padding: 14px 24px; background: var(--blue); color: white;
+    border-radius: 12px; font-weight: 700; cursor: pointer; font-size: 16px;
+  }
+  .import-box label:active { transform: scale(0.97); }
+  .import-box .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .import-box .file-name { font-size: 14px; margin-top: 8px; word-break: break-all; }
+
+  /* ── Version number ── */
+  .version { text-align: center; font-size: 12px; color: var(--muted); padding: 16px 0; margin-top: auto; }
+
+  /* ── Category badge ── */
+  .cat-badge { font-size: 10px; padding: 2px 6px; border-radius: 4px; background: var(--bg); color: var(--muted); font-weight: 600; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -241,6 +248,7 @@
   <div style="text-align:center;margin-top:24px;font-size:12px;color:var(--muted);">
     Demo PINs: <b>1234</b> (Worker) · <b>9999</b> (Admin)
   </div>
+  <div class="version" id="versionLabel">v1.2.0</div>
 </div>
 
 <!-- ════════ SCREEN: ACTION CHOICE ════════ -->
@@ -259,6 +267,7 @@
   </div>
   <div class="today-count" id="todayCount"></div>
   <div id="adminMenuWrap"></div>
+  <div class="version" id="versionLabel2">v1.2.0</div>
 </div>
 
 <!-- ════════ SCREEN: CAMERA ════════ -->
@@ -280,7 +289,9 @@
   <img class="photo-thumb" id="photoThumb" alt="captured">
   <div class="field">
     <label>📦 Item Type</label>
-    <input type="text" id="itemInput" placeholder="Item name / description">
+    <input type="text" id="itemInput" placeholder="Item name" list="catalogueList" autocomplete="off">
+    <datalist id="catalogueList"></datalist>
+    <div class="picker-hint">💡 Type or pick from list</div>
   </div>
   <div class="field">
     <label>🔢 Quantity</label>
@@ -319,10 +330,12 @@
   <div class="screen-sub">Manage the system</div>
   <div class="admin-menu">
     <button class="admin-item" onclick="showUsers()"><span class="ico">👥</span> Users</button>
-    <button class="admin-item" onclick="showLog()"><span class="ico">📋</span> Transaction Log</button>
-    <button class="admin-item" onclick="showInventory()"><span class="ico">📊</span> Inventory Levels</button>
-    <button class="admin-item" onclick="sendReportNow()"><span class="ico">📈</span> Send Weekly Report Now</button>
+    <button class="admin-item" onclick="showCatalogue()"><span class="ico">📋</span> Catalogue</button>
+    <button class="admin-item" onclick="showLog()"><span class="ico">📊</span> Transaction Log</button>
+    <button class="admin-item" onclick="showInventory()"><span class="ico">📈</span> Stock Levels</button>
+    <button class="admin-item" onclick="sendReportNow()"><span class="ico">📨</span> Send Weekly Report Now</button>
   </div>
+  <div class="version">v1.2.0</div>
 </div>
 
 <!-- ════════ SCREEN: USERS ════════ -->
@@ -352,11 +365,59 @@
   <div class="table-card" id="usersList"></div>
 </div>
 
+<!-- ════════ SCREEN: CATALOGUE ════════ -->
+<div class="screen" id="screen-catalogue">
+  <div class="section-header">
+    <button class="back-btn" onclick="showScreen('screen-admin')">←</button>
+    <div class="screen-title" style="margin:0;">📋 Catalogue</div>
+  </div>
+
+  <!-- Add new item -->
+  <div class="add-item-form">
+    <div class="field">
+      <label>📦 Item Name</label>
+      <input type="text" id="newItemName" placeholder="e.g. Cable Trunking 75x50mm">
+    </div>
+    <div class="field">
+      <label>🏷️ Category</label>
+      <input type="text" id="newItemCategory" placeholder="e.g. Trunking, Cable, Camera" list="categoryList">
+      <datalist id="categoryList"></datalist>
+    </div>
+    <div style="display:flex;gap:12px;">
+      <div class="field" style="flex:1;">
+        <label>📐 Unit</label>
+        <input type="text" id="newItemUnit" placeholder="pcs, m, roll" value="pcs">
+      </div>
+      <div class="field" style="flex:1;">
+        <label>⚠️ Min Qty</label>
+        <input type="number" id="newItemMinQty" placeholder="20" value="20" inputmode="numeric">
+      </div>
+      <div class="field" style="flex:1;">
+        <label>📦 Current Qty</label>
+        <input type="number" id="newItemQty" placeholder="0" value="0" inputmode="numeric">
+      </div>
+    </div>
+    <button class="btn btn-primary" onclick="addCatalogueItem()">➕ Add Item to Catalogue</button>
+  </div>
+
+  <!-- Import from CSV -->
+  <div class="import-box">
+    <div style="font-weight:700;margin-bottom:8px;">📥 Import Catalogue (CSV)</div>
+    <input type="file" id="importFile" accept=".csv" onchange="handleImportFile(event)">
+    <label for="importFile">📁 Choose CSV File</label>
+    <div class="hint">Columns: item_name, category, unit, min_qty, current_qty</div>
+    <div class="file-name" id="importFileName"></div>
+  </div>
+
+  <!-- Catalogue list -->
+  <div class="table-card" id="catalogueTable"></div>
+</div>
+
 <!-- ════════ SCREEN: LOG ════════ -->
 <div class="screen" id="screen-log">
   <div class="section-header">
     <button class="back-btn" onclick="showScreen('screen-admin')">←</button>
-    <div class="screen-title" style="margin:0;">📋 Transaction Log</div>
+    <div class="screen-title" style="margin:0;">📊 Transaction Log</div>
   </div>
   <div class="table-card" id="logTable"></div>
 </div>
@@ -365,7 +426,7 @@
 <div class="screen" id="screen-inventory">
   <div class="section-header">
     <button class="back-btn" onclick="showScreen('screen-admin')">←</button>
-    <div class="screen-title" style="margin:0;">📊 Inventory Levels</div>
+    <div class="screen-title" style="margin:0;">📈 Stock Levels</div>
   </div>
   <div class="table-card" id="inventoryTable"></div>
 </div>
@@ -379,27 +440,31 @@
 
 <script>
 /* ════════════════════════════════════════════════════════════
-   CONFIG
+   CONFIG & VERSION
    ════════════════════════════════════════════════════════════ */
+
+const APP_VERSION = 'v1.2.0';
 
 // Set this to your Apps Script Web App URL after deploy.
 // Leave empty to run in DEMO MODE (mock data, no backend).
 const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 
-// Low stock threshold for warnings
+// Low stock threshold for warnings (fallback; catalogue items have their own min_qty)
 const LOW_STOCK_THRESHOLD = 20;
 
 /* ════════════════════════════════════════════════════════════
    STATE
    ════════════════════════════════════════════════════════════ */
 
-let currentUser = null;       // {id, name, role}
-let currentAction = 'in';     // 'in' | 'out'
+let currentUser = null;
+let currentUserPin = null;  // stored at login for admin API calls
+let currentAction = 'in';
 let pinBuffer = '';
 let cameraStream = null;
-let capturedBlob = null;      // photo as Blob for upload
-let capturedDataUrl = null;   // photo as data URL for preview
-let ocrResult = null;         // {item, qty} from Gemini
+let capturedBlob = null;
+let capturedDataUrl = null;
+let ocrResult = null;
+let catalogueCache = [];  // cached catalogue items for picker
 
 // ── Mock data store (DEMO MODE only) ──
 const mockDB = {
@@ -409,14 +474,16 @@ const mockDB = {
     {id: 3, name: 'Lee',    pin: '9999', role: 'admin',  active: true},
   ],
   transactions: [
-    {ts: '2026-07-11T08:30:00', user: 'Ahmad', type: 'in',  item: 'A4 Paper Ream',    qty: 50, notes: '', photo_url: ''},
-    {ts: '2026-07-11T09:15:00', user: 'Siti',  type: 'out', item: 'Hand Soap 5L',     qty: 5,  notes: 'Pantry restock', photo_url: ''},
-    {ts: '2026-07-11T10:45:00', user: 'Ahmad', type: 'in',  item: 'Light Bulb LED 9W',qty: 24, notes: '', photo_url: ''},
+    {ts: '2026-07-11T08:30:00', user: 'Ahmad', type: 'in',  item: 'RG59 Coaxial Cable 100m Roll', qty: 5,  notes: '', photo_url: ''},
+    {ts: '2026-07-11T09:15:00', user: 'Siti',  type: 'out', item: 'CCTV Camera Dome 4MP',         qty: 3,  notes: 'Zone B install', photo_url: ''},
+    {ts: '2026-07-11T10:45:00', user: 'Ahmad', type: 'in',  item: 'Cable Trunking 25x25mm White', qty: 100,notes: '', photo_url: ''},
   ],
-  inventory: [
-    {item: 'A4 Paper Ream',     current_qty: 320, last_updated: '2026-07-11T08:30:00'},
-    {item: 'Hand Soap 5L',      current_qty: 12,  last_updated: '2026-07-11T09:15:00'},
-    {item: 'Light Bulb LED 9W', current_qty: 87,  last_updated: '2026-07-11T10:45:00'},
+  catalogue: [
+    {item_name: 'Cable Trunking 25x25mm White', category: 'Trunking', unit: 'm',    min_qty: 50,  current_qty: 200, last_updated: '2026-07-11T10:45:00'},
+    {item_name: 'Cable Trunking 50x50mm White', category: 'Trunking', unit: 'm',    min_qty: 30,  current_qty: 120, last_updated: '2026-07-10T14:00:00'},
+    {item_name: 'RG59 Coaxial Cable 100m Roll', category: 'Cable',    unit: 'roll', min_qty: 5,   current_qty: 18,  last_updated: '2026-07-11T08:30:00'},
+    {item_name: 'CCTV Camera Dome 4MP',         category: 'Camera',   unit: 'pcs',  min_qty: 10,  current_qty: 42,  last_updated: '2026-07-11T09:15:00'},
+    {item_name: 'Power Supply 12V 10A',         category: 'Power',    unit: 'pcs',  min_qty: 5,   current_qty: 8,   last_updated: '2026-07-09T11:00:00'},
   ],
   nextUserId: 4,
 };
@@ -429,8 +496,6 @@ const isDemo = !APPS_SCRIPT_URL;
 
 async function api(action, payload = {}) {
   if (isDemo) return mockApi(action, payload);
-  // Apps Script web apps: use text/plain to avoid CORS preflight,
-  // and follow the 302 redirect to googleusercontent.com automatically.
   const res = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -443,7 +508,7 @@ async function api(action, payload = {}) {
 
 // ── Mock backend ──
 async function mockApi(action, payload) {
-  await new Promise(r => setTimeout(r, 400)); // simulate latency
+  await new Promise(r => setTimeout(r, 400));
   switch (action) {
     case 'login': {
       const u = mockDB.users.find(u => u.pin === payload.pin && u.active);
@@ -452,7 +517,7 @@ async function mockApi(action, payload) {
     }
     case 'users': {
       if (payload.op === 'add') {
-        mockDB.users.push({id: mockDB.nextUserId++, name: payload.name, pin: payload.pin, role: payload.role, active: true});
+        mockDB.users.push({id: mockDB.nextUserId++, name: payload.name, pin: payload.pin_new || payload.pin, role: payload.role, active: true});
         return {ok: true};
       }
       if (payload.op === 'delete') {
@@ -461,39 +526,71 @@ async function mockApi(action, payload) {
       }
       return {ok: true, users: mockDB.users};
     }
+    case 'catalogue': {
+      if (payload.op === 'add') {
+        var exists = mockDB.catalogue.find(c => c.item_name === payload.item_name);
+        if (exists) return {ok: false, error: 'Item already exists'};
+        mockDB.catalogue.push({
+          item_name: payload.item_name, category: payload.category || 'Uncategorized',
+          unit: payload.unit || 'pcs', min_qty: payload.min_qty != null ? Number(payload.min_qty) : 20,
+          current_qty: payload.current_qty != null ? Number(payload.current_qty) : 0,
+          last_updated: new Date().toISOString()
+        });
+        return {ok: true};
+      }
+      if (payload.op === 'import') {
+        var added = 0, updated = 0;
+        payload.items.forEach(function(item) {
+          var ex = mockDB.catalogue.find(c => c.item_name === item.item_name);
+          if (ex) {
+            if (item.category) ex.category = item.category;
+            if (item.unit) ex.unit = item.unit;
+            if (item.min_qty != null) ex.min_qty = Number(item.min_qty);
+            if (item.current_qty != null) ex.current_qty = Number(item.current_qty);
+            ex.last_updated = new Date().toISOString();
+            updated++;
+          } else {
+            mockDB.catalogue.push({
+              item_name: item.item_name, category: item.category || 'Uncategorized',
+              unit: item.unit || 'pcs', min_qty: item.min_qty != null ? Number(item.min_qty) : 20,
+              current_qty: item.current_qty != null ? Number(item.current_qty) : 0,
+              last_updated: new Date().toISOString()
+            });
+            added++;
+          }
+        });
+        return {ok: true, added: added, updated: updated, total: payload.items.length};
+      }
+      if (payload.op === 'delete') {
+        mockDB.catalogue = mockDB.catalogue.filter(c => c.item_name !== payload.item_name);
+        return {ok: true};
+      }
+      return {ok: true, catalogue: mockDB.catalogue};
+    }
     case 'ocr': {
-      // Simulate Gemini Vision reading a label
       const samples = [
-        {item: 'A4 Paper Ream 80gsm', qty: 10},
-        {item: 'Light Bulb LED 9W', qty: 24},
-        {item: 'Hand Soap 5L Refill', qty: 6},
-        {item: 'AA Battery (pack of 4)', qty: 15},
+        {item: 'Cable Trunking 25x25mm White', qty: 50},
+        {item: 'CCTV Camera Dome 4MP', qty: 12},
+        {item: 'RG59 Coaxial Cable 100m Roll', qty: 3},
+        {item: 'Power Supply 12V 10A', qty: 5},
       ];
       return {ok: true, ocr: samples[Math.floor(Math.random() * samples.length)]};
     }
     case 'transaction': {
       const tx = {
-        ts: new Date().toISOString(),
-        user: payload.user,
-        type: payload.type,
-        item: payload.item,
-        qty: parseInt(payload.qty),
-        notes: payload.notes || '',
-        photo_url: 'mock://stored-in-drive',
+        ts: new Date().toISOString(), user: payload.user, type: payload.type,
+        item: payload.item, qty: parseInt(payload.qty), notes: payload.notes || '', photo_url: 'mock://stored-in-drive',
       };
       mockDB.transactions.unshift(tx);
-      // Update inventory
-      let inv = mockDB.inventory.find(i => i.item === payload.item);
+      let inv = mockDB.catalogue.find(i => i.item_name === payload.item);
       if (!inv) {
-        inv = {item: payload.item, current_qty: 0, last_updated: tx.ts};
-        mockDB.inventory.push(inv);
+        inv = {item_name: payload.item, category: 'Uncategorized', unit: 'pcs', min_qty: LOW_STOCK_THRESHOLD, current_qty: 0, last_updated: tx.ts};
+        mockDB.catalogue.push(inv);
       }
       inv.current_qty += (payload.type === 'in' ? tx.qty : -tx.qty);
       inv.last_updated = tx.ts;
       return {ok: true, transaction: tx, telegram_sent: true};
     }
-    case 'inventory':
-      return {ok: true, inventory: mockDB.inventory};
     case 'log':
       return {ok: true, transactions: mockDB.transactions};
     case 'report':
@@ -501,6 +598,25 @@ async function mockApi(action, payload) {
     default:
       return {ok: false, error: 'Unknown action'};
   }
+}
+
+/* ════════════════════════════════════════════════════════════
+   CATALOGUE CACHE & PICKER
+   ════════════════════════════════════════════════════════════ */
+
+async function loadCatalogue() {
+  try {
+    const res = await api('catalogue');
+    if (res.ok) {
+      catalogueCache = res.catalogue || [];
+      // Populate datalist for item picker
+      const dl = document.getElementById('catalogueList');
+      dl.innerHTML = catalogueCache.map(c => `<option value="${escapeHtml(c.item_name)}">`).join('');
+      // Populate category datalist
+      const cats = [...new Set(catalogueCache.map(c => c.category).filter(Boolean))];
+      document.getElementById('categoryList').innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+    }
+  } catch (e) { /* ignore on load */ }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -515,21 +631,14 @@ function showScreen(id) {
   document.getElementById('topbar').style.display = showTopbar ? 'flex' : 'none';
   document.getElementById('demoBanner').style.display = isDemo ? 'block' : 'none';
 
-  // Back button visibility
   const backBtn = document.getElementById('backBtn');
-  const showBack = ['screen-camera','screen-verify','screen-users','screen-log','screen-inventory'].includes(id);
+  const showBack = ['screen-camera','screen-verify','screen-users','screen-log','screen-inventory','screen-catalogue'].includes(id);
   backBtn.style.display = showBack ? 'block' : 'none';
 
-  // Topbar title
   const titles = {
-    'screen-action': '📦 Inventory',
-    'screen-camera': '📷 Camera',
-    'screen-verify': '✅ Verify',
-    'screen-success': '✔️ Done',
-    'screen-admin': '⚙️ Admin',
-    'screen-users': '👥 Users',
-    'screen-log': '📋 Log',
-    'screen-inventory': '📊 Stock',
+    'screen-action': '📦 Inventory', 'screen-camera': '📷 Camera', 'screen-verify': '✅ Verify',
+    'screen-success': '✔️ Done', 'screen-admin': '⚙️ Admin', 'screen-users': '👥 Users',
+    'screen-log': '📊 Log', 'screen-inventory': '📈 Stock', 'screen-catalogue': '📋 Catalogue',
   };
   document.getElementById('topbarTitle').textContent = titles[id] || '📦 Inventory';
 }
@@ -542,7 +651,6 @@ document.getElementById('numpad').addEventListener('click', async (e) => {
   const btn = e.target.closest('button');
   if (!btn) return;
   const key = btn.dataset.key;
-
   if (key === 'clear') {
     pinBuffer = pinBuffer.slice(0, -1);
   } else if (key === 'enter') {
@@ -552,7 +660,6 @@ document.getElementById('numpad').addEventListener('click', async (e) => {
   } else if (pinBuffer.length < 4) {
     pinBuffer += key;
     if (pinBuffer.length === 4) {
-      // Auto-submit after short delay
       setTimeout(() => { if (pinBuffer.length === 4) attemptLogin(); }, 200);
     }
   }
@@ -560,8 +667,7 @@ document.getElementById('numpad').addEventListener('click', async (e) => {
 });
 
 function updatePinDots() {
-  const dots = document.querySelectorAll('.pin-dot');
-  dots.forEach((d, i) => d.classList.toggle('filled', i < pinBuffer.length));
+  document.querySelectorAll('.pin-dot').forEach((d, i) => d.classList.toggle('filled', i < pinBuffer.length));
 }
 
 async function attemptLogin() {
@@ -570,9 +676,11 @@ async function attemptLogin() {
     const res = await api('login', { pin: pinBuffer });
     if (res.ok) {
       currentUser = res.user;
+      currentUserPin = pinBuffer;
       pinBuffer = '';
       updatePinDots();
       document.getElementById('userChip').textContent = '👤 ' + currentUser.name;
+      loadCatalogue(); // preload catalogue for picker
       updateActionScreen();
       showScreen('screen-action');
     } else {
@@ -593,19 +701,12 @@ async function attemptLogin() {
 
 async function updateActionScreen() {
   document.getElementById('welcomeMsg').textContent = '👋 Hi, ' + currentUser.name;
-
-  // Show admin menu only for admins
   const adminWrap = document.getElementById('adminMenuWrap');
   if (currentUser.role === 'admin') {
-    adminWrap.innerHTML = `
-      <div style="margin-top:24px;">
-        <button class="btn btn-secondary" onclick="showScreen('screen-admin')">⚙️ Admin Panel</button>
-      </div>`;
+    adminWrap.innerHTML = `<div style="margin-top:24px;"><button class="btn btn-secondary" onclick="showScreen('screen-admin')">⚙️ Admin Panel</button></div>`;
   } else {
     adminWrap.innerHTML = '';
   }
-
-  // Today's count
   try {
     const res = await api('log');
     if (res.ok) {
@@ -626,11 +727,8 @@ async function goCamera(action) {
   showScreen('screen-camera');
   document.getElementById('cameraVideo').style.display = 'block';
   document.getElementById('captureCanvas').style.display = 'none';
-
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'environment' }, audio: false
-    });
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false });
     document.getElementById('cameraVideo').srcObject = cameraStream;
   } catch (err) {
     toast('❌ Camera access denied. Check permissions.', true);
@@ -641,35 +739,25 @@ async function goCamera(action) {
 function capturePhoto() {
   const video = document.getElementById('cameraVideo');
   const canvas = document.getElementById('captureCanvas');
-  const w = video.videoWidth || 1024;
-  const h = video.videoHeight || 768;
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, w, h);
-
+  const w = video.videoWidth || 1024, h = video.videoHeight || 768;
+  canvas.width = w; canvas.height = h;
+  canvas.getContext('2d').drawImage(video, 0, 0, w, h);
   canvas.toBlob((blob) => {
     capturedBlob = blob;
     capturedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
     stopCamera();
     document.getElementById('cameraVideo').style.display = 'none';
     document.getElementById('captureCanvas').style.display = 'block';
-    // Proceed to OCR
     runOCR();
   }, 'image/jpeg', 0.85);
 }
 
 function stopCamera() {
-  if (cameraStream) {
-    cameraStream.getTracks().forEach(t => t.stop());
-    cameraStream = null;
-  }
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
 }
 
 function retakePhoto() {
-  capturedBlob = null;
-  capturedDataUrl = null;
-  ocrResult = null;
+  capturedBlob = null; capturedDataUrl = null; ocrResult = null;
   goCamera(currentAction);
 }
 
@@ -680,16 +768,13 @@ function retakePhoto() {
 async function runOCR() {
   showOverlay('⏳ Reading photo...');
   try {
-    // Send base64 photo to backend → Gemini Vision
-    const photoBase64 = capturedDataUrl.split(',')[1]; // strip data:image/jpeg;base64,
+    const photoBase64 = capturedDataUrl.split(',')[1];
     const res = await api('ocr', { photo: photoBase64 });
-
     if (res.ok && res.ocr) {
       ocrResult = res.ocr;
       document.getElementById('itemInput').value = res.ocr.item || '';
       document.getElementById('qtyInput').value = res.ocr.qty || 1;
     } else {
-      // OCR failed — let worker enter manually
       document.getElementById('itemInput').value = '';
       document.getElementById('qtyInput').value = 1;
       toast('⚠️ Could not read photo. Please enter manually.', true);
@@ -700,7 +785,6 @@ async function runOCR() {
     document.getElementById('qtyInput').value = 1;
   } finally {
     hideOverlay();
-    // Show verify screen with photo thumbnail
     document.getElementById('photoThumb').src = capturedDataUrl;
     showScreen('screen-verify');
   }
@@ -713,28 +797,22 @@ async function runOCR() {
 function adjustQty(delta) {
   const input = document.getElementById('qtyInput');
   let val = parseInt(input.value) || 0;
-  val = Math.max(0, val + delta);
-  input.value = val;
+  input.value = Math.max(0, val + delta);
 }
 
 async function confirmTransaction() {
   const item = document.getElementById('itemInput').value.trim();
   const qty = parseInt(document.getElementById('qtyInput').value);
   const notes = document.getElementById('notesInput').value.trim();
-
   if (!item) { toast('❌ Enter item type', true); return; }
   if (!qty || qty < 1) { toast('❌ Enter quantity', true); return; }
 
   showOverlay('💾 Saving...');
-
   try {
     const res = await api('transaction', {
-      user: currentUser.name,
-      type: currentAction,
-      item, qty, notes,
-      photo: capturedDataUrl, // base64 — backend uploads to Drive
+      user: currentUser.name, type: currentAction, item, qty, notes,
+      photo: capturedDataUrl,
     });
-
     if (res.ok) {
       showSuccess(res.transaction || { item, qty, type: currentAction, user: currentUser.name }, res.telegram_sent);
     } else {
@@ -751,10 +829,7 @@ function showSuccess(tx, telegramSent) {
   const isPositive = tx.type === 'in';
   const sign = isPositive ? '+' : '−';
   const color = isPositive ? 'var(--green)' : 'var(--red)';
-
-  document.getElementById('successTitle').textContent =
-    (isPositive ? '📥 Stock In' : '📤 Stock Out') + ' Recorded';
-
+  document.getElementById('successTitle').textContent = (isPositive ? '📥 Stock In' : '📤 Stock Out') + ' Recorded';
   document.getElementById('successDetail').innerHTML = `
     <div class="row">📦 <b>${escapeHtml(tx.item)}</b></div>
     <div class="row">🔢 <span style="color:${color};font-size:28px;font-weight:700;">${sign}${tx.qty}</span></div>
@@ -762,9 +837,7 @@ function showSuccess(tx, telegramSent) {
     <div class="row">🕐 ${new Date().toLocaleString()}</div>
     <div class="row" style="margin-top:12px;font-size:14px;color:var(--muted);">
       ${telegramSent ? '📨 Telegram sent' : '⚠️ Telegram not sent'}
-    </div>
-  `;
-
+    </div>`;
   showScreen('screen-success');
 }
 
@@ -777,9 +850,7 @@ async function showUsers() {
   showOverlay('Loading...');
   try {
     const res = await api('users');
-    if (res.ok) {
-      renderUsers(res.users);
-    }
+    if (res.ok) renderUsers(res.users);
   } catch (e) { toast('Error: ' + e.message, true); }
   finally { hideOverlay(); }
 }
@@ -793,25 +864,23 @@ function renderUsers(users) {
       <span class="pin-badge">${u.pin}</span>
       <span class="role-badge ${u.role}">${u.role}</span>
       ${u.id === currentUser.id ? '' : `<button class="del-btn" onclick="deleteUser(${u.id})" title="Delete">🗑️</button>`}
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 async function addUser() {
   const name = document.getElementById('newUserName').value.trim();
   const pin = document.getElementById('newUserPin').value.trim();
   const role = document.getElementById('newUserRole').value;
-
   if (!name) { toast('❌ Enter name', true); return; }
   if (!/^\d{4}$/.test(pin)) { toast('❌ PIN must be 4 digits', true); return; }
 
   showOverlay('Adding...');
   try {
-    const res = await api('users', { op: 'add', name, pin, role });
+    const res = await api('users', { op: 'add', name, pin_new: pin, role, pin: getAdminPin() });
     if (res.ok) {
       document.getElementById('newUserName').value = '';
       document.getElementById('newUserPin').value = '';
-      const list = await api('users');
+      const list = await api('users', { pin: getAdminPin() });
       if (list.ok) renderUsers(list.users);
       toast('✅ User added');
     } else { toast('❌ ' + (res.error || 'Failed'), true); }
@@ -823,14 +892,162 @@ async function deleteUser(id) {
   if (!confirm('Delete this user?')) return;
   showOverlay('Deleting...');
   try {
-    const res = await api('users', { op: 'delete', id });
+    const res = await api('users', { op: 'delete', id, pin: getAdminPin() });
     if (res.ok) {
-      const list = await api('users');
+      const list = await api('users', { pin: getAdminPin() });
       if (list.ok) renderUsers(list.users);
       toast('✅ User deleted');
     }
   } catch (e) { toast('Error: ' + e.message, true); }
   finally { hideOverlay(); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   ADMIN: CATALOGUE
+   ════════════════════════════════════════════════════════════ */
+
+async function showCatalogue() {
+  showScreen('screen-catalogue');
+  showOverlay('Loading...');
+  try {
+    const res = await api('catalogue');
+    if (res.ok) {
+      catalogueCache = res.catalogue || [];
+      renderCatalogue(catalogueCache);
+      // Also update the item picker datalist
+      const dl = document.getElementById('catalogueList');
+      dl.innerHTML = catalogueCache.map(c => `<option value="${escapeHtml(c.item_name)}">`).join('');
+      const cats = [...new Set(catalogueCache.map(c => c.category).filter(Boolean))];
+      document.getElementById('categoryList').innerHTML = cats.map(c => `<option value="${escapeHtml(c)}">`).join('');
+    }
+  } catch (e) { toast('Error: ' + e.message, true); }
+  finally { hideOverlay(); }
+}
+
+function renderCatalogue(items) {
+  const wrap = document.getElementById('catalogueTable');
+  if (!items.length) { wrap.innerHTML = '<p style="padding:16px;text-align:center;color:var(--muted);">No items in catalogue yet.</p>'; return; }
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead><tr><th>Item</th><th>Cat</th><th>Qty</th><th>Min</th><th></th></tr></thead>
+      <tbody>
+        ${items.map(c => {
+          var low = Number(c.current_qty) <= Number(c.min_qty);
+          return `<tr>
+            <td style="font-weight:600;">${escapeHtml(c.item_name)}<br><span style="font-size:11px;color:var(--muted);">${escapeHtml(c.unit||'')}</span></td>
+            <td><span class="cat-badge">${escapeHtml(c.category||'')}</span></td>
+            <td><span class="badge ${low?'low':'ok'}">${c.current_qty}</span></td>
+            <td style="font-size:12px;color:var(--muted);">${c.min_qty}</td>
+            <td><button class="del-btn" onclick="deleteCatalogueItem('${escapeHtml(c.item_name).replace(/'/g,"\\'")}')">🗑️</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+}
+
+async function addCatalogueItem() {
+  const item_name = document.getElementById('newItemName').value.trim();
+  const category = document.getElementById('newItemCategory').value.trim();
+  const unit = document.getElementById('newItemUnit').value.trim();
+  const min_qty = document.getElementById('newItemMinQty').value;
+  const current_qty = document.getElementById('newItemQty').value;
+  if (!item_name) { toast('❌ Enter item name', true); return; }
+
+  showOverlay('Adding item...');
+  try {
+    const res = await api('catalogue', { op: 'add', item_name, category, unit, min_qty, current_qty, pin: getAdminPin() });
+    if (res.ok) {
+      document.getElementById('newItemName').value = '';
+      document.getElementById('newItemCategory').value = '';
+      document.getElementById('newItemQty').value = '0';
+      const list = await api('catalogue');
+      if (list.ok) { catalogueCache = list.catalogue; renderCatalogue(list.catalogue); }
+      toast('✅ Item added to catalogue');
+    } else { toast('❌ ' + (res.error || 'Failed'), true); }
+  } catch (e) { toast('Error: ' + e.message, true); }
+  finally { hideOverlay(); }
+}
+
+async function deleteCatalogueItem(itemName) {
+  if (!confirm('Delete "' + itemName + '" from catalogue?')) return;
+  showOverlay('Deleting...');
+  try {
+    const res = await api('catalogue', { op: 'delete', item_name: itemName, pin: getAdminPin() });
+    if (res.ok) {
+      const list = await api('catalogue');
+      if (list.ok) { catalogueCache = list.catalogue; renderCatalogue(list.catalogue); }
+      toast('✅ Item deleted');
+    }
+  } catch (e) { toast('Error: ' + e.message, true); }
+  finally { hideOverlay(); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   ADMIN: CSV IMPORT
+   ════════════════════════════════════════════════════════════ */
+
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('importFileName').textContent = '📄 ' + file.name;
+
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const text = e.target.result;
+    const items = parseCSV(text);
+    if (!items.length) { toast('❌ No valid rows found in CSV', true); return; }
+
+    showOverlay('📥 Importing ' + items.length + ' items...');
+    try {
+      const res = await api('catalogue', { op: 'import', items, pin: getAdminPin() });
+      if (res.ok) {
+        toast(`✅ Imported: ${res.added} added, ${res.updated} updated`);
+        const list = await api('catalogue');
+        if (list.ok) { catalogueCache = list.catalogue; renderCatalogue(list.catalogue); }
+        document.getElementById('importFileName').textContent = '';
+        document.getElementById('importFile').value = '';
+      } else { toast('❌ ' + (res.error || 'Import failed'), true); }
+    } catch (err) { toast('Error: ' + err.message, true); }
+    finally { hideOverlay(); }
+  };
+  reader.readAsText(file);
+}
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if (lines.length < 2) return [];
+  // Parse header
+  const headers = parseCSVLine(lines[0]).map(h => h.trim().toLowerCase());
+  const items = [];
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const vals = parseCSVLine(lines[i]);
+    const row = {};
+    headers.forEach((h, j) => { row[h] = vals[j] ? vals[j].trim() : ''; });
+    if (row.item_name) {
+      items.push({
+        item_name: row.item_name,
+        category: row.category || 'Uncategorized',
+        unit: row.unit || 'pcs',
+        min_qty: row.min_qty !== '' ? Number(row.min_qty) : 20,
+        current_qty: row.current_qty !== '' ? Number(row.current_qty) : 0,
+      });
+    }
+  }
+  return items;
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
+    else { current += ch; }
+  }
+  result.push(current);
+  return result;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -851,16 +1068,13 @@ async function showLog() {
           <table class="data-table">
             <thead><tr><th>Time</th><th>User</th><th>Type</th><th>Item</th><th>Qty</th></tr></thead>
             <tbody>
-              ${t.map(tx => `
-                <tr>
-                  <td>${formatTime(tx.ts)}</td>
-                  <td>${escapeHtml(tx.user)}</td>
-                  <td>${tx.type === 'in' ? '📥' : '📤'}</td>
-                  <td>${escapeHtml(tx.item)}</td>
-                  <td style="font-weight:700;color:${tx.type==='in'?'var(--green)':'var(--red)'};">
-                    ${tx.type==='in'?'+':'−'}${tx.qty}
-                  </td>
-                </tr>`).join('')}
+              ${t.map(tx => `<tr>
+                <td>${formatTime(tx.ts)}</td>
+                <td>${escapeHtml(tx.user)}</td>
+                <td>${tx.type === 'in' ? '📥' : '📤'}</td>
+                <td>${escapeHtml(tx.item)}</td>
+                <td style="font-weight:700;color:${tx.type==='in'?'var(--green)':'var(--red)'};">${tx.type==='in'?'+':'−'}${tx.qty}</td>
+              </tr>`).join('')}
             </tbody>
           </table>`;
       }
@@ -870,28 +1084,29 @@ async function showLog() {
 }
 
 /* ════════════════════════════════════════════════════════════
-   ADMIN: INVENTORY
+   ADMIN: STOCK LEVELS (from catalogue)
    ════════════════════════════════════════════════════════════ */
 
 async function showInventory() {
   showScreen('screen-inventory');
   showOverlay('Loading...');
   try {
-    const res = await api('inventory');
+    const res = await api('catalogue');
     if (res.ok) {
-      const inv = res.inventory;
+      const inv = res.catalogue || [];
       if (!inv.length) {
-        document.getElementById('inventoryTable').innerHTML = '<p style="padding:16px;text-align:center;color:var(--muted);">No inventory data.</p>';
+        document.getElementById('inventoryTable').innerHTML = '<p style="padding:16px;text-align:center;color:var(--muted);">No catalogue items.</p>';
       } else {
         document.getElementById('inventoryTable').innerHTML = `
           <table class="data-table">
-            <thead><tr><th>Item</th><th>Qty</th><th>Updated</th></tr></thead>
+            <thead><tr><th>Item</th><th>Qty</th><th>Min</th><th>Updated</th></tr></thead>
             <tbody>
               ${inv.map(i => {
-                const low = i.current_qty <= LOW_STOCK_THRESHOLD;
+                var low = Number(i.current_qty) <= Number(i.min_qty);
                 return `<tr>
-                  <td style="font-weight:600;">${escapeHtml(i.item)}</td>
+                  <td style="font-weight:600;">${escapeHtml(i.item_name)}<br><span style="font-size:11px;color:var(--muted);">${escapeHtml(i.category||'')} · ${escapeHtml(i.unit||'')}</span></td>
                   <td><span class="badge ${low?'low':'ok'}">${i.current_qty}</span>${low?' ⚠️':''}</td>
+                  <td style="font-size:12px;color:var(--muted);">${i.min_qty}</td>
                   <td style="font-size:12px;color:var(--muted);">${formatTime(i.last_updated)}</td>
                 </tr>`;
               }).join('')}
@@ -921,6 +1136,10 @@ async function sendReportNow() {
 /* ════════════════════════════════════════════════════════════
    UTILITIES
    ════════════════════════════════════════════════════════════ */
+
+function getAdminPin() {
+  return currentUserPin;
+}
 
 function showOverlay(msg) {
   document.getElementById('overlayMsg').textContent = msg || 'Working...';
@@ -956,35 +1175,37 @@ function formatTime(ts) {
 
 document.getElementById('logoutBtn').addEventListener('click', () => {
   if (confirm('Logout?')) {
-    currentUser = null;
-    pinBuffer = '';
-    updatePinDots();
+    currentUser = null; currentUserPin = null; pinBuffer = ''; updatePinDots();
     showScreen('screen-login');
   }
 });
 
 document.getElementById('backBtn').addEventListener('click', () => {
   stopCamera();
-  if (currentUser.role === 'admin' && document.getElementById('screen-admin').classList.contains('active')) {
-    showScreen('screen-action');
-  } else if (document.getElementById('screen-users').classList.contains('active') ||
-             document.getElementById('screen-log').classList.contains('active') ||
-             document.getElementById('screen-inventory').classList.contains('active')) {
+  if (document.getElementById('screen-users').classList.contains('active') ||
+      document.getElementById('screen-log').classList.contains('active') ||
+      document.getElementById('screen-inventory').classList.contains('active') ||
+      document.getElementById('screen-catalogue').classList.contains('active')) {
     showScreen('screen-admin');
   } else {
     showScreen('screen-action');
   }
 });
 
-// Clean up camera when leaving page
 window.addEventListener('beforeunload', stopCamera);
-
-// Prevent number input scroll hijacking
 document.getElementById('qtyInput').addEventListener('wheel', e => e.preventDefault());
 
 // ── Init on page load ──
-// Hide demo banner immediately if backend is connected (showScreen() not called on initial load)
 document.getElementById('demoBanner').style.display = isDemo ? 'block' : 'none';
+
+/* ════════════════════════════════════════════════════════════
+   PWA SERVICE WORKER
+   ════════════════════════════════════════════════════════════ */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  });
+}
 </script>
 </body>
 </html>
