@@ -14,7 +14,7 @@
 
 /* ── CONFIG (set these, or set via setup() / PropertiesService) ── */
 var GEMINI_API_KEY   = '';  // from Google AI Studio
-var GEMINI_MODEL     = 'gemini-2.0-flash';  // free-tier vision model
+var GEMINI_MODEL     = 'gemini-2.5-flash';  // free-tier vision model
 var TELEGRAM_BOT_TOKEN = '';  // from @BotFather
 var TELEGRAM_CHAT_ID   = '';  // your chat/group ID
 var LOW_STOCK_THRESHOLD = 20;
