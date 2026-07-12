@@ -1,7 +1,7 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  INVENTORY TRACKER — Google Apps Script Backend  (v1.3.0)
- *  Bound to a Google Sheet with tabs: users, transactions, catalogue
+ *  INVENTORY TRACKER — Google Apps Script Backend  (v1.4.0)
+ *  Tabs: users, transactions, catalogue, sites
  * ═══════════════════════════════════════════════════════════════
  */
 
@@ -12,14 +12,16 @@ var TELEGRAM_BOT_TOKEN = '';
 var TELEGRAM_CHAT_ID   = '';
 var LOW_STOCK_THRESHOLD = 20;
 var DRIVE_FOLDER_NAME  = 'InventoryTrackerPhotos';
+var DAILY_REPORT_HOUR  = 18;  // 6 PM — manager can change via setSchedule()
 
 /* ── Sheet column indexes (0-based) ── */
 // users:        id, name, pin, role, active
-// transactions: ts, user, type, item, qty, notes, photo_url, gemini_raw
+// transactions: ts, user, type, item, qty, destination, photo_url, gemini_raw
 // catalogue:    item_name, category, unit, min_qty, current_qty, last_updated, ref_photo_url
+// sites:        site_name, active
 
 function doGet(e) {
-  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.3.0' });
+  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.4.0' });
 }
 
 function doPost(e) {
@@ -34,8 +36,10 @@ function doPost(e) {
       case 'ocr':         result = handleOCR(body); break;
       case 'transaction': result = handleTransaction(body); break;
       case 'catalogue':   result = handleCatalogue(body); break;
+      case 'sites':       result = handleSites(body); break;
       case 'log':         result = handleLog(body); break;
       case 'report':      result = handleReport(body); break;
+      case 'schedule':    result = handleSchedule(body); break;
       default:            result = { ok: false, error: 'Unknown action: ' + action };
     }
     return jsonOut(result);
@@ -63,15 +67,12 @@ function handleLogin(body) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   USERS CRUD (add, edit, delete, list)
+   USERS CRUD
    ════════════════════════════════════════════════════════════ */
 
 function handleUsers(body) {
-  // Mutations require admin pin
   if (body.op === 'add' || body.op === 'delete' || body.op === 'edit') {
-    if (!verifyAdmin(body.pin)) {
-      return { ok: false, error: 'Manager access required' };
-    }
+    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
   }
 
   if (body.op === 'add') {
@@ -80,8 +81,7 @@ function handleUsers(body) {
     }
     var sheet = getSheet('users');
     var id = sheet.getLastRow();
-    var newPin = body.pin_new || body.pin;
-    sheet.appendRow([id, body.name, newPin, body.role || 'worker', true]);
+    sheet.appendRow([id, body.name, body.pin_new || body.pin, body.role || 'worker', true]);
     return { ok: true };
   }
 
@@ -107,10 +107,7 @@ function handleUsers(body) {
     var sheet = getSheet('users');
     var data = sheet.getDataRange().getValues();
     for (var i = 1; i < data.length; i++) {
-      if (Number(data[i][0]) === Number(body.id)) {
-        sheet.deleteRow(i + 1);
-        return { ok: true };
-      }
+      if (Number(data[i][0]) === Number(body.id)) { sheet.deleteRow(i + 1); return { ok: true }; }
     }
     return { ok: false, error: 'User not found' };
   }
@@ -123,10 +120,7 @@ function getAllUsers() {
   var data = sheet.getDataRange().getValues();
   var users = [];
   for (var i = 1; i < data.length; i++) {
-    users.push({
-      id: data[i][0], name: data[i][1], pin: data[i][2],
-      role: data[i][3], active: data[i][4]
-    });
+    users.push({ id: data[i][0], name: data[i][1], pin: data[i][2], role: data[i][3], active: data[i][4] });
   }
   return users;
 }
@@ -137,6 +131,50 @@ function verifyAdmin(pin) {
     if (String(users[i].pin) === String(pin) && users[i].role === 'admin') return true;
   }
   return false;
+}
+
+/* ════════════════════════════════════════════════════════════
+   SITES CRUD
+   ════════════════════════════════════════════════════════════ */
+
+function handleSites(body) {
+  if (body.op === 'add' || body.op === 'delete') {
+    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
+  }
+
+  if (body.op === 'add') {
+    if (!body.site_name) return { ok: false, error: 'Site name required' };
+    var sheet = getSheet('sites');
+    // Check duplicate
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(body.site_name).trim()) return { ok: false, error: 'Site already exists' };
+    }
+    sheet.appendRow([body.site_name, true]);
+    return { ok: true };
+  }
+
+  if (body.op === 'delete') {
+    var sheet = getSheet('sites');
+    var data = sheet.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if (String(data[i][0]).trim() === String(body.site_name).trim()) { sheet.deleteRow(i + 1); return { ok: true }; }
+    }
+    return { ok: false, error: 'Site not found' };
+  }
+
+  // Default: list sites
+  return { ok: true, sites: getAllSites() };
+}
+
+function getAllSites() {
+  var sheet = getSheet('sites');
+  var data = sheet.getDataRange().getValues();
+  var sites = [];
+  for (var i = 1; i < data.length; i++) {
+    if (data[i][1] !== false && data[i][1] !== 'FALSE') sites.push(data[i][0]);
+  }
+  return sites;
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -152,8 +190,7 @@ function handleOCR(body) {
     ? ' Known items in this inventory (try to match if possible): ' + catItems.join(', ') + '.'
     : '';
 
-  var model = GEMINI_MODEL;
-  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent?key=' + apiKey;
+  var url = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent?key=' + apiKey;
 
   var prompt = 'You are an inventory assistant for a CCTV installation project. ' +
     'Look at this photo of a stock item or box. ' +
@@ -163,43 +200,19 @@ function handleOCR(body) {
     'Respond ONLY with valid JSON: {"item":"...","qty":number}';
 
   var payload = {
-    contents: [{
-      parts: [
-        { text: prompt },
-        { inline_data: { mime_type: 'image/jpeg', data: body.photo } }
-      ]
-    }],
+    contents: [{ parts: [{ text: prompt }, { inline_data: { mime_type: 'image/jpeg', data: body.photo } }] }],
     generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
   };
 
-  var options = {
-    method: 'post',
-    contentType: 'application/json',
-    payload: JSON.stringify(payload),
-    muteHttpExceptions: true
-  };
-
   try {
-    var resp = UrlFetchApp.fetch(url, options);
+    var resp = UrlFetchApp.fetch(url, { method: 'post', contentType: 'application/json', payload: JSON.stringify(payload), muteHttpExceptions: true });
     var json = JSON.parse(resp.getContentText());
-
-    if (json.error) {
-      return { ok: false, error: 'Gemini: ' + json.error.message };
-    }
-
+    if (json.error) return { ok: false, error: 'Gemini: ' + json.error.message };
     var text = json.candidates[0].content.parts[0].text;
-    var parsed;
-    try {
-      text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim();
-      parsed = JSON.parse(text);
-    } catch (e) {
-      return { ok: false, error: 'Could not parse OCR result: ' + text };
-    }
-
+    try { text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim(); var parsed = JSON.parse(text); }
+    catch (e) { return { ok: false, error: 'Could not parse OCR result: ' + text }; }
     return { ok: true, ocr: { item: parsed.item || '', qty: parseInt(parsed.qty) || 1 }, raw: text };
-  } catch (err) {
-    return { ok: false, error: 'Gemini request failed: ' + err.toString() };
-  }
+  } catch (err) { return { ok: false, error: 'Gemini request failed: ' + err.toString() }; }
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -209,35 +222,21 @@ function handleOCR(body) {
 function handleTransaction(body) {
   var ts = new Date().toISOString();
   var photoUrl = '';
-
   if (body.photo) {
-    try {
-      photoUrl = uploadPhotoToDrive(body.photo, body.item, body.user);
-    } catch (e) {
-      Logger.log('Photo upload failed: ' + e);
-    }
+    try { photoUrl = uploadPhotoToDrive(body.photo, body.item, body.user); } catch (e) { Logger.log('Photo upload failed: ' + e); }
   }
 
   var sheet = getSheet('transactions');
-  sheet.appendRow([
-    ts, body.user, body.type, body.item, parseInt(body.qty),
-    body.notes || '', photoUrl, ''
-  ]);
+  // Note: column 6 is now 'destination' (was 'notes')
+  sheet.appendRow([ts, body.user, body.type, body.item, parseInt(body.qty), body.destination || '', photoUrl, '']);
 
   updateCatalogueStock(body.item, parseInt(body.qty), body.type, ts);
 
-  var telegramSent = false;
-  try {
-    sendTelegramTransaction(body.user, body.type, body.item, parseInt(body.qty), body.notes);
-    telegramSent = true;
-  } catch (e) {
-    Logger.log('Telegram send failed: ' + e);
-  }
-
+  // Per-transaction Telegram is now disabled — daily EOD summary instead
   return {
     ok: true,
-    transaction: { ts: ts, user: body.user, type: body.type, item: body.item, qty: parseInt(body.qty) },
-    telegram_sent: telegramSent
+    transaction: { ts: ts, user: body.user, type: body.type, item: body.item, qty: parseInt(body.qty), destination: body.destination || '' },
+    telegram_sent: false
   };
 }
 
@@ -245,11 +244,9 @@ function updateCatalogueStock(item, qty, type, ts) {
   var sheet = getSheet('catalogue');
   var data = sheet.getDataRange().getValues();
   var delta = (type === 'in') ? qty : -qty;
-
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]).trim() === String(item).trim()) {
-      var newQty = Number(data[i][4]) + delta;
-      sheet.getRange(i + 1, 5).setValue(newQty);
+      sheet.getRange(i + 1, 5).setValue(Number(data[i][4]) + delta);
       sheet.getRange(i + 1, 6).setValue(ts);
       return;
     }
@@ -258,30 +255,17 @@ function updateCatalogueStock(item, qty, type, ts) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   CATALOGUE — master item list + stock levels + ref photo + import
+   CATALOGUE
    ════════════════════════════════════════════════════════════ */
 
 function handleCatalogue(body) {
-  if (body.op === 'add') {
+  if (body.op === 'add' || body.op === 'edit' || body.op === 'import' || body.op === 'delete') {
     if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
-    return addCatalogueItem(body);
   }
-
-  if (body.op === 'edit') {
-    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
-    return editCatalogueItem(body);
-  }
-
-  if (body.op === 'import') {
-    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
-    return importCatalogue(body);
-  }
-
-  if (body.op === 'delete') {
-    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
-    return deleteCatalogueItem(body);
-  }
-
+  if (body.op === 'add')    return addCatalogueItem(body);
+  if (body.op === 'edit')   return editCatalogueItem(body);
+  if (body.op === 'import') return importCatalogue(body);
+  if (body.op === 'delete') return deleteCatalogueItem(body);
   return { ok: true, catalogue: getAllCatalogueItems() };
 }
 
@@ -291,13 +275,9 @@ function getAllCatalogueItems() {
   var items = [];
   for (var i = 1; i < data.length; i++) {
     items.push({
-      item_name: data[i][0],
-      category: data[i][1],
-      unit: data[i][2],
-      min_qty: Number(data[i][3]),
-      current_qty: Number(data[i][4]),
-      last_updated: data[i][5],
-      ref_photo_url: data[i][6] || ''
+      item_name: data[i][0], category: data[i][1], unit: data[i][2],
+      min_qty: Number(data[i][3]), current_qty: Number(data[i][4]),
+      last_updated: data[i][5], ref_photo_url: data[i][6] || ''
     });
   }
   return items;
@@ -305,37 +285,19 @@ function getAllCatalogueItems() {
 
 function addCatalogueItem(body) {
   if (!body.item_name) return { ok: false, error: 'Item name required' };
-
   var sheet = getSheet('catalogue');
   var data = sheet.getDataRange().getValues();
-
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(body.item_name).trim()) {
-      return { ok: false, error: 'Item already exists in catalogue' };
-    }
+    if (String(data[i][0]).trim() === String(body.item_name).trim()) return { ok: false, error: 'Item already exists' };
   }
-
   var ts = new Date().toISOString();
   var refPhotoUrl = '';
-
-  // Upload reference photo if provided (base64)
   if (body.ref_photo) {
-    try {
-      refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue');
-    } catch (e) {
-      Logger.log('Ref photo upload failed: ' + e);
-    }
+    try { refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue'); } catch (e) { Logger.log('Ref photo upload failed: ' + e); }
   }
-
-  sheet.appendRow([
-    body.item_name,
-    body.category || 'Uncategorized',
-    body.unit || 'pcs',
+  sheet.appendRow([body.item_name, body.category || 'Uncategorized', body.unit || 'pcs',
     body.min_qty != null ? Number(body.min_qty) : LOW_STOCK_THRESHOLD,
-    body.current_qty != null ? Number(body.current_qty) : 0,
-    ts,
-    refPhotoUrl
-  ]);
+    body.current_qty != null ? Number(body.current_qty) : 0, ts, refPhotoUrl]);
   return { ok: true };
 }
 
@@ -343,7 +305,6 @@ function editCatalogueItem(body) {
   if (!body.item_name) return { ok: false, error: 'Item name required' };
   var sheet = getSheet('catalogue');
   var data = sheet.getDataRange().getValues();
-
   for (var i = 1; i < data.length; i++) {
     if (String(data[i][0]).trim() === String(body.item_name).trim()) {
       if (body.category) sheet.getRange(i + 1, 2).setValue(body.category);
@@ -351,15 +312,8 @@ function editCatalogueItem(body) {
       if (body.min_qty != null) sheet.getRange(i + 1, 4).setValue(Number(body.min_qty));
       if (body.current_qty != null) sheet.getRange(i + 1, 5).setValue(Number(body.current_qty));
       sheet.getRange(i + 1, 6).setValue(new Date().toISOString());
-
-      // Upload new ref photo if provided
       if (body.ref_photo) {
-        try {
-          var refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue');
-          sheet.getRange(i + 1, 7).setValue(refPhotoUrl);
-        } catch (e) {
-          Logger.log('Ref photo upload failed: ' + e);
-        }
+        try { var refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue'); sheet.getRange(i + 1, 7).setValue(refPhotoUrl); } catch (e) {}
       }
       return { ok: true };
     }
@@ -371,59 +325,36 @@ function deleteCatalogueItem(body) {
   var sheet = getSheet('catalogue');
   var data = sheet.getDataRange().getValues();
   for (var i = 1; i < data.length; i++) {
-    if (String(data[i][0]).trim() === String(body.item_name).trim()) {
-      sheet.deleteRow(i + 1);
-      return { ok: true };
-    }
+    if (String(data[i][0]).trim() === String(body.item_name).trim()) { sheet.deleteRow(i + 1); return { ok: true }; }
   }
   return { ok: false, error: 'Item not found' };
 }
 
 function importCatalogue(body) {
   if (!body.items || !body.items.length) return { ok: false, error: 'No items to import' };
-
   var sheet = getSheet('catalogue');
   var data = sheet.getDataRange().getValues();
   var existing = {};
-  for (var i = 1; i < data.length; i++) {
-    existing[String(data[i][0]).trim()] = i + 1;
-  }
-
+  for (var i = 1; i < data.length; i++) { existing[String(data[i][0]).trim()] = i + 1; }
   var added = 0, updated = 0;
   var ts = new Date().toISOString();
-
   body.items.forEach(function(item) {
     if (!item.item_name) return;
     var row = existing[String(item.item_name).trim()];
-    var refPhoto = item.ref_photo_url || '';
-    var rowData = [
-      item.item_name,
-      item.category || 'Uncategorized',
-      item.unit || 'pcs',
+    var rowData = [item.item_name, item.category || 'Uncategorized', item.unit || 'pcs',
       item.min_qty != null ? Number(item.min_qty) : LOW_STOCK_THRESHOLD,
-      item.current_qty != null ? Number(item.current_qty) : 0,
-      ts,
-      refPhoto
-    ];
+      item.current_qty != null ? Number(item.current_qty) : 0, ts, item.ref_photo_url || ''];
     if (row) {
       var newQty = item.current_qty != null ? Number(item.current_qty) : Number(data[row - 1][4]);
       sheet.getRange(row, 1, 1, 7).setValues([[
-        item.item_name,
-        item.category || data[row - 1][1] || 'Uncategorized',
+        item.item_name, item.category || data[row - 1][1] || 'Uncategorized',
         item.unit || data[row - 1][2] || 'pcs',
         item.min_qty != null ? Number(item.min_qty) : Number(data[row - 1][3]),
-        newQty,
-        ts,
-        refPhoto || data[row - 1][6] || ''
+        newQty, ts, item.ref_photo_url || data[row - 1][6] || ''
       ]]);
       updated++;
-    } else {
-      sheet.appendRow(rowData);
-      existing[String(item.item_name).trim()] = sheet.getLastRow();
-      added++;
-    }
+    } else { sheet.appendRow(rowData); existing[String(item.item_name).trim()] = sheet.getLastRow(); added++; }
   });
-
   return { ok: true, added: added, updated: updated, total: body.items.length };
 }
 
@@ -436,11 +367,9 @@ function uploadPhotoToDrive(base64Data, itemName, user) {
   var ts = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmmss');
   var safeName = (itemName || 'item').replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
   var fileName = ts + '_' + user + '_' + safeName + '.jpg';
-
   var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/jpeg', fileName);
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-
   return file.getUrl();
 }
 
@@ -451,33 +380,12 @@ function getOrCreateFolder(name) {
 }
 
 /* ════════════════════════════════════════════════════════════
-   TELEGRAM
+   TELEGRAM (for daily EOD report only)
    ════════════════════════════════════════════════════════════ */
 
-function sendTelegramTransaction(user, type, item, qty, notes) {
-  var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
-  var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
-  if (!token || !chatId) throw new Error('Telegram not configured');
-
-  var arrow = type === 'in' ? '📥 STOCK IN' : '📤 STOCK OUT';
-  var sign = type === 'in' ? '+' : '−';
-  var time = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
-
-  var msg = arrow + '\n' +
-    '📦 ' + item + '\n' +
-    '🔢 ' + sign + qty + '\n' +
-    '👤 ' + user + '\n' +
-    '🕐 ' + time;
-  if (notes) msg += '\n💬 ' + notes;
-
-  sendTelegram(token, chatId, msg);
-}
-
 function sendTelegram(token, chatId, text) {
-  var url = 'https://api.telegram.org/bot' + token + '/sendMessage';
-  UrlFetchApp.fetch(url, {
-    method: 'post',
-    contentType: 'application/json',
+  UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+    method: 'post', contentType: 'application/json',
     payload: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' }),
     muteHttpExceptions: true
   });
@@ -494,86 +402,111 @@ function handleLog() {
   for (var i = data.length - 1; i >= 1; i--) {
     txs.push({
       ts: data[i][0], user: data[i][1], type: data[i][2],
-      item: data[i][3], qty: Number(data[i][4]), notes: data[i][5], photo_url: data[i][6]
+      item: data[i][3], qty: Number(data[i][4]), destination: data[i][5], photo_url: data[i][6]
     });
   }
   return { ok: true, transactions: txs };
 }
 
 /* ════════════════════════════════════════════════════════════
-   WEEKLY REPORT
+   REPORT — returns text for in-app display
    ════════════════════════════════════════════════════════════ */
 
-function handleReport() {
-  var msg = generateWeeklyReport();
-  var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
-  var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return { ok: false, error: 'Telegram not configured' };
-
-  sendTelegram(token, chatId, msg);
-  return { ok: true, sent: true, message: 'Weekly report sent to Telegram' };
+function handleReport(body) {
+  // If op=send, also push to Telegram
+  if (body.op === 'send') {
+    var msg = generateDailyReport();
+    var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
+    var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
+    if (!token || !chatId) return { ok: false, error: 'Telegram not configured', report: msg };
+    sendTelegram(token, chatId, msg);
+    return { ok: true, sent: true, message: 'Daily report sent to Telegram', report: msg };
+  }
+  // Default: return report text for in-app display
+  return { ok: true, report: generateDailyReport() };
 }
 
-function generateWeeklyReport() {
+function generateDailyReport() {
   var tz = Session.getScriptTimeZone();
   var now = new Date();
-  var weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+  var todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   var sheet = getSheet('transactions');
   var data = sheet.getDataRange().getValues();
-  var weekTx = [];
+  var todayTx = [];
   for (var i = 1; i < data.length; i++) {
     var ts = new Date(data[i][0]);
-    if (ts >= weekAgo && ts <= now) {
-      weekTx.push({
-        user: data[i][1], type: data[i][2], item: data[i][3], qty: Number(data[i][4])
-      });
+    if (ts >= todayStart && ts <= now) {
+      todayTx.push({ user: data[i][1], type: data[i][2], item: data[i][3], qty: Number(data[i][4]), destination: data[i][5] });
     }
   }
 
-  var inTx = weekTx.filter(function(t) { return t.type === 'in'; });
-  var outTx = weekTx.filter(function(t) { return t.type === 'out'; });
+  var inTx = todayTx.filter(function(t) { return t.type === 'in'; });
+  var outTx = todayTx.filter(function(t) { return t.type === 'out'; });
   var inQty = inTx.reduce(function(s, t) { return s + t.qty; }, 0);
   var outQty = outTx.reduce(function(s, t) { return s + t.qty; }, 0);
 
   var byUser = {};
-  weekTx.forEach(function(t) { byUser[t.user] = (byUser[t.user] || 0) + 1; });
+  todayTx.forEach(function(t) { byUser[t.user] = (byUser[t.user] || 0) + 1; });
   var userLines = Object.keys(byUser).map(function(u) { return u + ' (' + byUser[u] + ')'; }).join(', ');
 
+  // By destination
+  var byDest = {};
+  todayTx.forEach(function(t) { if (t.destination) byDest[t.destination] = (byDest[t.destination] || 0) + t.qty; });
+  var destLines = Object.keys(byDest).map(function(d) { return '• ' + d + ': ' + byDest[d] + ' items'; }).join('\n');
+
   var catItems = getAllCatalogueItems();
-  var invLines = [];
   var lowStock = [];
   catItems.forEach(function(c) {
-    invLines.push('• ' + c.item_name + ': ' + c.current_qty + ' ' + (c.unit || ''));
     var threshold = c.min_qty != null ? Number(c.min_qty) : LOW_STOCK_THRESHOLD;
-    if (c.current_qty <= threshold) lowStock.push('• ' + c.item_name + ' (' + c.current_qty + ' ' + (c.unit||'') + ' left)');
+    if (c.current_qty <= threshold) lowStock.push('• ' + c.item_name + ' (' + c.current_qty + ' ' + (c.unit||'') + ')');
   });
 
-  var periodStart = Utilities.formatDate(weekAgo, tz, 'd MMM');
-  var periodEnd = Utilities.formatDate(now, tz, 'd MMM yyyy');
+  var dateStr = Utilities.formatDate(now, tz, 'd MMM yyyy');
 
-  var msg = '📊 WEEKLY INVENTORY REPORT\n';
-  msg += 'Period: ' + periodStart + '–' + periodEnd + '\n\n';
-  msg += 'STOCK MOVEMENT\n';
+  var msg = '📊 DAILY INVENTORY REPORT\n' + dateStr + '\n\n';
+  msg += 'STOCK MOVEMENT TODAY\n';
   msg += '📥 In:  ' + inQty + ' items (' + inTx.length + ' transactions)\n';
-  msg += '📤 Out: ' + outQty + ' items (' + outTx.length + ' transactions)\n\n';
-  msg += 'CURRENT LEVELS\n' + invLines.join('\n') + '\n';
-  if (lowStock.length) {
-    msg += '\n⚠️ LOW STOCK ALERTS\n' + lowStock.join('\n') + '\n';
-  }
-  msg += '\nTotal transactions: ' + weekTx.length + '\n';
-  msg += 'By: ' + userLines;
+  msg += '📤 Out: ' + outQty + ' items (' + outTx.length + ' transactions)\n';
+  if (destLines) msg += '\nBY DESTINATION\n' + destLines + '\n';
+  msg += '\nLOW STOCK ALERTS\n';
+  msg += lowStock.length ? lowStock.join('\n') + '\n' : '✅ All items above minimum\n';
+  msg += '\nTotal transactions today: ' + todayTx.length + '\n';
+  if (userLines) msg += 'By: ' + userLines;
 
   return msg;
 }
 
-function sendWeeklyReport() {
-  var msg = generateWeeklyReport();
+/* ════════════════════════════════════════════════════════════
+   DAILY EOD TRIGGER
+   ════════════════════════════════════════════════════════════ */
+
+function sendDailyReport() {
+  // Called by time-driven trigger
+  var msg = generateDailyReport();
   var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
   var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
-  if (token && chatId) {
-    sendTelegram(token, chatId, msg);
+  if (token && chatId) sendTelegram(token, chatId, msg);
+}
+
+function handleSchedule(body) {
+  // Manager can change the daily EOD hour
+  if (body.op === 'set') {
+    if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
+    var hour = parseInt(body.hour);
+    if (isNaN(hour) || hour < 0 || hour > 23) return { ok: false, error: 'Invalid hour (0-23)' };
+    PropertiesService.getScriptProperties().setProperty('DAILY_REPORT_HOUR', String(hour));
+    // Recreate trigger
+    var triggers = ScriptApp.getProjectTriggers();
+    triggers.forEach(function(t) {
+      if (t.getHandlerFunction() === 'sendDailyReport') ScriptApp.deleteTrigger(t);
+    });
+    ScriptApp.newTrigger('sendDailyReport').timeBased().everyDays(1).atHour(hour).create();
+    return { ok: true, hour: hour };
   }
+  // Default: get current schedule
+  var h = PropertiesService.getScriptProperties().getProperty('DAILY_REPORT_HOUR');
+  return { ok: true, hour: h ? parseInt(h) : DAILY_REPORT_HOUR };
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -582,83 +515,67 @@ function sendWeeklyReport() {
 
 function checkConfig() {
   var p = PropertiesService.getScriptProperties().getProperties();
-  Logger.log('GEMINI_API_KEY: ' + (p.GEMINI_API_KEY ? '✅ set (' + p.GEMINI_API_KEY.substring(0, 8) + '...)' : '❌ missing'));
-  Logger.log('TELEGRAM_BOT_TOKEN: ' + (p.TELEGRAM_BOT_TOKEN ? '✅ set (' + p.TELEGRAM_BOT_TOKEN.substring(0, 8) + '...)' : '❌ missing'));
-  Logger.log('TELEGRAM_CHAT_ID: ' + (p.TELEGRAM_CHAT_ID ? '✅ set (' + p.TELEGRAM_CHAT_ID + ')' : '❌ missing'));
-  Logger.log('\nIf any are missing, go to:\nProject Settings (⚙️) → Script properties → Edit script properties');
+  Logger.log('GEMINI_API_KEY: ' + (p.GEMINI_API_KEY ? '✅ set' : '❌ missing'));
+  Logger.log('TELEGRAM_BOT_TOKEN: ' + (p.TELEGRAM_BOT_TOKEN ? '✅ set' : '❌ missing'));
+  Logger.log('TELEGRAM_CHAT_ID: ' + (p.TELEGRAM_CHAT_ID ? '✅ set' : '❌ missing'));
+  var h = PropertiesService.getScriptProperties().getProperty('DAILY_REPORT_HOUR');
+  Logger.log('DAILY_REPORT_HOUR: ' + (h || DAILY_REPORT_HOUR) + ':00');
 }
 
 /* ════════════════════════════════════════════════════════════
-   SETUP — run once (or after schema changes)
+   SETUP
    ════════════════════════════════════════════════════════════ */
 
 function setup() {
-  var config = {
-    GEMINI_API_KEY:     '',
-    TELEGRAM_BOT_TOKEN: '',
-    TELEGRAM_CHAT_ID:   '',
-  };
+  var config = { GEMINI_API_KEY: '', TELEGRAM_BOT_TOKEN: '', TELEGRAM_CHAT_ID: '' };
   var props = PropertiesService.getScriptProperties();
-  for (var key in config) {
-    if (config[key]) {
-      props.setProperty(key, config[key]);
-    }
-  }
+  for (var key in config) { if (config[key]) props.setProperty(key, config[key]); }
 
-  // Ensure sheet headers exist (also adds ref_photo_url column if missing)
   initSheetHeaders();
 
   var users = getAllUsers();
   if (users.length === 0) {
     getSheet('users').appendRow([1, 'Manager', '9999', 'admin', true]);
-    getSheet('users').appendRow([2, 'Worker', '1234', 'worker', true]);
-    Logger.log('Seeded default users: Manager/9999, Worker/1234');
+    getSheet('users').appendRow([2, 'User1', '1234', 'worker', true]);
+    Logger.log('Seeded default users: Manager/9999, User1/1234');
   }
 
   var cat = getAllCatalogueItems();
-  if (cat.length === 0) {
-    seedCCTVCatalogue();
-    Logger.log('Seeded CCTV project catalogue (5 items with ref photos)');
+  if (cat.length === 0) { seedCCTVCatalogue(); Logger.log('Seeded CCTV catalogue'); }
+
+  var sites = getAllSites();
+  if (sites.length === 0) {
+    var sSheet = getSheet('sites');
+    sSheet.appendRow(['Site A - Office Tower', true]);
+    sSheet.appendRow(['Site B - Residential', true]);
+    sSheet.appendRow(['Site C - Warehouse', true]);
+    Logger.log('Seeded 3 work sites');
   }
 
-  // Ensure ref_photo_url column exists on existing catalogue sheets
-  ensureRefPhotoColumn();
-
+  // Daily EOD trigger
   var triggers = ScriptApp.getProjectTriggers();
   triggers.forEach(function(t) {
-    if (t.getHandlerFunction() === 'sendWeeklyReport') {
+    if (t.getHandlerFunction() === 'sendDailyReport' || t.getHandlerFunction() === 'sendWeeklyReport') {
       ScriptApp.deleteTrigger(t);
     }
   });
-  ScriptApp.newTrigger('sendWeeklyReport')
-    .timeBased()
-    .everyWeeks(1)
-    .onWeekDay(ScriptApp.WeekDay.MONDAY)
-    .atHour(9)
-    .create();
+  var dailyHour = props.getProperty('DAILY_REPORT_HOUR');
+  var hour = dailyHour ? parseInt(dailyHour) : DAILY_REPORT_HOUR;
+  ScriptApp.newTrigger('sendDailyReport').timeBased().everyDays(1).atHour(hour).create();
 
-  Logger.log('✅ Setup complete (v1.3.0). Trigger created, sheet initialized.');
-  Logger.log('Next step: Deploy → Manage deployments → New version → Deploy');
-}
-
-function ensureRefPhotoColumn() {
-  var sheet = getSheet('catalogue');
-  var lastCol = sheet.getLastColumn();
-  if (lastCol < 7) {
-    sheet.getRange(1, 7).setValue('ref_photo_url');
-  }
+  Logger.log('✅ Setup complete (v1.4.0). Daily EOD trigger at ' + hour + ':00.');
 }
 
 function seedCCTVCatalogue() {
   var sheet = getSheet('catalogue');
   var ts = new Date().toISOString();
-  // ref_photo_url uses placehold.co for mock images
+  // Using Wikimedia Commons for representative photos (reliable, permanent URLs)
   var items = [
-    ['Cable Trunking 25x25mm White', 'Trunking', 'm',    50,  200, ts, 'https://placehold.co/300x200/2563eb/white?text=Cable+Trunking+25x25'],
-    ['Cable Trunking 50x50mm White', 'Trunking', 'm',    30,  120, ts, 'https://placehold.co/300x200/2563eb/white?text=Cable+Trunking+50x50'],
-    ['RG59 Coaxial Cable 100m Roll', 'Cable',    'roll', 5,   18,  ts, 'https://placehold.co/300x200/2563eb/white?text=RG59+Cable+Roll'],
-    ['CCTV Camera Dome 4MP',         'Camera',   'pcs',  10,  45,  ts, 'https://placehold.co/300x200/2563eb/white?text=CCTV+Dome+4MP'],
-    ['Power Supply 12V 10A',         'Power',    'pcs',  5,   8,   ts, 'https://placehold.co/300x200/2563eb/white?text=Power+Supply+12V'],
+    ['Cable Trunking 25x25mm White', 'Trunking', 'm',    50,  200, ts, 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Cable_trunking.jpg/300px-Cable_trunking.jpg'],
+    ['Cable Trunking 50x50mm White', 'Trunking', 'm',    30,  120, ts, 'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Cable_trunking.jpg/300px-Cable_trunking.jpg'],
+    ['RG59 Coaxial Cable 100m Roll', 'Cable',    'roll', 5,   18,  ts, 'https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/Coaxial_cable_cutaway.jpg/300px-Coaxial_cable_cutaway.jpg'],
+    ['CCTV Camera Dome 4MP',         'Camera',   'pcs',  10,  45,  ts, 'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c4/Dome_camera.jpg/300px-Dome_camera.jpg'],
+    ['Power Supply 12V 10A',         'Power',    'pcs',  5,   8,   ts, 'https://upload.wikimedia.org/wikipedia/commons/thumb/8/85/AC-DC_Power_Supply.jpg/300px-AC-DC_Power_Supply.jpg'],
   ];
   items.forEach(function(row) { sheet.appendRow(row); });
 }
@@ -670,10 +587,7 @@ function seedCCTVCatalogue() {
 function getSheet(name) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var sheet = ss.getSheetByName(name);
-  if (!sheet) {
-    sheet = ss.insertSheet(name);
-    initSheetHeadersFor(sheet, name);
-  }
+  if (!sheet) { sheet = ss.insertSheet(name); initSheetHeadersFor(sheet, name); }
   return sheet;
 }
 
@@ -681,23 +595,22 @@ function initSheetHeaders() {
   initSheetHeadersFor(getSheet('users'), 'users');
   initSheetHeadersFor(getSheet('transactions'), 'transactions');
   initSheetHeadersFor(getSheet('catalogue'), 'catalogue');
+  initSheetHeadersFor(getSheet('sites'), 'sites');
 }
 
 function initSheetHeadersFor(sheet, name) {
   var headers = {
     users:        ['id', 'name', 'pin', 'role', 'active'],
-    transactions: ['ts', 'user', 'type', 'item', 'qty', 'notes', 'photo_url', 'gemini_raw'],
-    catalogue:    ['item_name', 'category', 'unit', 'min_qty', 'current_qty', 'last_updated', 'ref_photo_url']
+    transactions: ['ts', 'user', 'type', 'item', 'qty', 'destination', 'photo_url', 'gemini_raw'],
+    catalogue:    ['item_name', 'category', 'unit', 'min_qty', 'current_qty', 'last_updated', 'ref_photo_url'],
+    sites:        ['site_name', 'active']
   };
   sheet.getRange(1, 1, 1, headers[name].length).setValues([headers[name]]);
   sheet.setFrozenRows(1);
 }
 
-function getProp(key) {
-  return PropertiesService.getScriptProperties().getProperty(key);
-}
+function getProp(key) { return PropertiesService.getScriptProperties().getProperty(key); }
 
 function jsonOut(obj) {
-  return ContentService.createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON);
+  return ContentService.createTextOutput(JSON.stringify(obj)).setMimeType(ContentService.MimeType.JSON);
 }
