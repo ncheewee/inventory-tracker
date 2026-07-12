@@ -127,9 +127,6 @@
   .table-card{background:var(--card);border-radius:12px;padding:12px;box-shadow:var(--shadow);overflow-x:auto}
 
   /* Mobile catalogue list */
-  .catalogue-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
-  .catalogue-toolbar .selection-hint{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px;color:var(--muted);line-height:1.3}
-  .catalogue-toolbar .btn{flex:0 0 auto;width:auto;min-width:108px;padding:11px 13px;font-size:13px;white-space:nowrap}
   .catalogue-list{padding:0;overflow:hidden}
   .catalogue-row{width:100%;display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px;border:0;border-bottom:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;text-align:left;cursor:pointer}
   .catalogue-row:last-child{border-bottom:0}
@@ -140,6 +137,10 @@
   .catalogue-stock{text-align:right;white-space:nowrap}
   .catalogue-stock .qty{display:block;font-size:15px;font-weight:800}
   .catalogue-stock .minimum{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+  .catalogue-inline-edit{grid-column:2/4;width:100%;margin-top:1px;padding:9px 12px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-size:13px;font-weight:750;cursor:pointer}
+  .catalogue-add-toggle{margin-top:16px}
+  #catalogueAddForm{display:none;margin-top:12px}
+  #catalogueAddForm.active{display:block}
 
   /* User rows */
   .user-row{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}
@@ -243,7 +244,7 @@
     <button data-key="0">0</button>
     <button data-key="enter" class="enter">✓</button>
   </div>
-  <div class="version">v1.6.0 · CODEX</div>
+  <div class="version">v1.7.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -265,7 +266,7 @@
       <button class="mgr-btn" onclick="showReport()"><span class="ico">📨</span><span class="txt">Report</span></button>
     </div>
   </div>
-  <div class="version">v1.6.0 · CODEX</div>
+  <div class="version">v1.7.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: CAMERA -->
@@ -283,10 +284,8 @@
   <img class="photo-thumb" id="photoThumb" alt="captured">
   <div class="field">
     <label>📦 Item</label>
-    <div class="picker-wrap">
-      <input type="text" id="itemInput" placeholder="Type or search item" autocomplete="off" oninput="filterPicker()">
-      <div class="picker-results" id="pickerResults"></div>
-    </div>
+    <select id="itemSelect" onchange="toggleNewTransactionItem()"></select>
+    <input type="text" id="newTransactionItem" placeholder="Enter new item name" style="display:none;margin-top:8px">
   </div>
   <div class="field">
     <label>🔢 Quantity</label>
@@ -333,7 +332,10 @@
 
 <!-- SCREEN: CATALOGUE -->
 <div class="screen" id="screen-catalogue">
-  <div class="form-card">
+  <div class="table-card catalogue-list" id="catalogueTable"></div>
+  <button class="btn btn-primary catalogue-add-toggle" id="showAddItemBtn" onclick="toggleCatalogueAddForm()">➕ Add Item</button>
+  <div class="form-card" id="catalogueAddForm">
+    <div style="font-size:17px;font-weight:750;margin-bottom:14px">Add catalogue item</div>
     <div class="field"><label>📦 Item Name</label><input type="text" id="newItemName" placeholder="e.g. Cable Trunking 75x50mm"></div>
     <div class="field"><label>🏷️ Category</label><input type="text" id="newItemCategory" placeholder="e.g. Trunking" list="categoryList"><datalist id="categoryList"></datalist></div>
     <div style="display:flex;gap:12px;">
@@ -352,13 +354,8 @@
         <input type="file" id="newItemPhotoInput" accept="image/*" onchange="handleNewItemPhoto(event)">
       </div>
     </div>
-    <button class="btn btn-primary" onclick="addCatalogueItem()">➕ Add Item</button>
+    <div class="btn-row"><button class="btn btn-secondary" onclick="toggleCatalogueAddForm(false)">Cancel</button><button class="btn btn-primary" onclick="addCatalogueItem()">Save Item</button></div>
   </div>
-  <div class="catalogue-toolbar">
-    <span class="selection-hint" id="catalogueSelectionHint">Select an item to edit</span>
-    <button class="btn btn-secondary" id="editCatalogueBtn" onclick="editSelectedCatalogueItem()" disabled>✏️ Edit item</button>
-  </div>
-  <div class="table-card catalogue-list" id="catalogueTable"></div>
 </div>
 
 <!-- SCREEN: SITES -->
@@ -444,7 +441,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION='v1.6.0-codex';
+const APP_VERSION='v1.7.0-codex';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 const LOW_STOCK_THRESHOLD=20;
 const STOCK_ITEM_PHOTOS={
@@ -592,23 +589,16 @@ async function loadSites(){
   try{const res=await api('sites');if(res.ok){sitesCache=res.sites||[]}}catch(e){}
 }
 
-/* ══ ITEM PICKER WITH THUMBNAILS ══ */
-function filterPicker(){
-  const query=document.getElementById('itemInput').value.toLowerCase();
-  const results=document.getElementById('pickerResults');
-  if(!query){results.classList.remove('active');return}
-  const matches=catalogueCache.filter(c=>c.item_name.toLowerCase().includes(query)).slice(0,8);
-  if(!matches.length){results.classList.remove('active');return}
-  results.innerHTML=matches.map(c=>{
-    const photoUrl=photoUrlForItem(c);const photo=photoUrl?`<img src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="placeholder" style="display:none;">📦</div>`:`<div class="placeholder">📦</div>`;
-    return `<div class="picker-item" onclick="selectItem('${escapeHtml(c.item_name).replace(/'/g,"\\'")}')">${photo}<div><div class="name">${escapeHtml(c.item_name)}</div><div class="cat">${escapeHtml(c.category||'')} · Stock: ${c.current_qty}</div></div></div>`;
-  }).join('');
-  results.classList.add('active');
+/* ══ TRANSACTION ITEM DROPDOWN ══ */
+function populateTransactionItems(preferredName=''){
+  const sel=document.getElementById('itemSelect');
+  sel.innerHTML='<option value="">Choose an existing item…</option>'+catalogueCache.map(c=>`<option value="${escapeHtml(c.item_name)}">${escapeHtml(c.item_name)} · ${c.current_qty} ${escapeHtml(c.unit||'')}</option>`).join('')+'<option value="__new__">➕ Add new item</option>';
+  const match=catalogueCache.find(c=>c.item_name.toLowerCase()===String(preferredName).trim().toLowerCase());
+  if(match)sel.value=match.item_name;else if(preferredName){sel.value='__new__';document.getElementById('newTransactionItem').value=preferredName}
+  toggleNewTransactionItem();
 }
-function selectItem(name){
-  document.getElementById('itemInput').value=name;
-  document.getElementById('pickerResults').classList.remove('active');
-}
+function toggleNewTransactionItem(){const isNew=document.getElementById('itemSelect').value==='__new__',input=document.getElementById('newTransactionItem');input.style.display=isNew?'block':'none';if(isNew)input.focus()}
+function getTransactionItem(){const selected=document.getElementById('itemSelect').value;return selected==='__new__'?document.getElementById('newTransactionItem').value.trim():selected}
 
 /* ══ CAMERA ══ */
 async function goCamera(action){
@@ -679,9 +669,9 @@ async function runOCR(){
   showOverlay('⏳ Reading photo...');
   try{
     const res=await api('ocr',{photo:capturedDataUrl.split(',')[1]});
-    if(res.ok&&res.ocr){ocrResult=res.ocr;document.getElementById('itemInput').value=res.ocr.item||'';document.getElementById('qtyInput').value=res.ocr.qty||1}
-    else{document.getElementById('itemInput').value='';document.getElementById('qtyInput').value=1;toast('⚠️ Could not read photo. Enter manually.',true)}
-  }catch(err){toast('OCR error: '+err.message,true);document.getElementById('itemInput').value='';document.getElementById('qtyInput').value=1}
+    if(res.ok&&res.ocr){ocrResult=res.ocr;populateTransactionItems(res.ocr.item||'');document.getElementById('qtyInput').value=res.ocr.qty||1}
+    else{populateTransactionItems();document.getElementById('qtyInput').value=1;toast('⚠️ Could not read photo. Select an item manually.',true)}
+  }catch(err){toast('OCR error: '+err.message,true);populateTransactionItems();document.getElementById('qtyInput').value=1}
   finally{
     hideOverlay();
     document.getElementById('photoThumb').src=capturedDataUrl;
@@ -706,7 +696,7 @@ function getDestination(){const selected=document.getElementById('destSelect').v
 /* ══ VERIFY & CONFIRM ══ */
 function adjustQty(delta){const i=document.getElementById('qtyInput');i.value=Math.max(0,(parseInt(i.value)||0)+delta)}
 async function confirmTransaction(){
-  const item=document.getElementById('itemInput').value.trim();
+  const item=getTransactionItem();
   const qty=parseInt(document.getElementById('qtyInput').value);
   const dest=currentAction==='out'?getDestination():'';
   if(!item){toast('❌ Enter item',true);return}
@@ -757,15 +747,14 @@ async function deleteUser(id){if(!confirm('Delete this user?'))return;showOverla
 
 /* ══ CATALOGUE ══ */
 async function showCatalogue(){
-  showScreen('screen-catalogue');showOverlay('Loading...');
+  showScreen('screen-catalogue');toggleCatalogueAddForm(false);showOverlay('Loading...');
   try{const res=await api('catalogue');if(res.ok){catalogueCache=res.catalogue||[];renderCatalogue(catalogueCache);updateCategoryList()}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 function renderCatalogue(items){
   const w=document.getElementById('catalogueTable');
-  if(!items.length){selectedCatItem=null;updateCatalogueSelection();w.innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items yet.</p>';return}
+  if(!items.length){selectedCatItem=null;w.innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items yet.</p>';return}
   if(selectedCatItem&&!items.some(c=>c.item_name===selectedCatItem))selectedCatItem=null;
-  w.innerHTML=items.map(c=>{const low=Number(c.current_qty)<=Number(c.min_qty);const photoUrl=photoUrlForItem(c);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<button class="catalogue-row${selectedCatItem===c.item_name?' selected':''}" type="button" onclick="selectCatalogueItem('${safeName}')">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span></button>`}).join('');
-  updateCatalogueSelection();
+  w.innerHTML=items.map(c=>{const selected=selectedCatItem===c.item_name,low=Number(c.current_qty)<=Number(c.min_qty),photoUrl=photoUrlForItem(c);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<div class="catalogue-row${selected?' selected':''}" role="button" tabindex="0" onclick="selectCatalogueItem('${safeName}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCatalogueItem('${safeName}')} ">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span>${selected?`<button class="catalogue-inline-edit" onclick="event.stopPropagation();openEditCatModal('${safeName}')">✏️ Edit this item</button>`:''}</div>`}).join('');
 }
 function normalisePhotoUrl(url){
   if(!url)return'';
@@ -774,14 +763,13 @@ function normalisePhotoUrl(url){
   return driveMatch?`https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w400`:value;
 }
 function photoUrlForItem(item){return normalisePhotoUrl(item&&item.ref_photo_url)||STOCK_ITEM_PHOTOS[String(item&&item.item_name||'').trim().toLowerCase()]||''}
-function selectCatalogueItem(itemName){selectedCatItem=selectedCatItem===itemName?null:itemName;renderCatalogue(catalogueCache)}
-function updateCatalogueSelection(){const btn=document.getElementById('editCatalogueBtn'),hint=document.getElementById('catalogueSelectionHint');if(!btn||!hint)return;btn.disabled=!selectedCatItem;hint.textContent=selectedCatItem?'Selected: '+selectedCatItem:'Select an item to edit'}
-function editSelectedCatalogueItem(){if(selectedCatItem)openEditCatModal(selectedCatItem)}
+function selectCatalogueItem(itemName){selectedCatItem=itemName;renderCatalogue(catalogueCache);const item=catalogueCache.find(c=>c.item_name===itemName),photo=item&&photoUrlForItem(item);if(photo)openPhotoViewer(photo)}
+function toggleCatalogueAddForm(force){const form=document.getElementById('catalogueAddForm'),show=typeof force==='boolean'?force:!form.classList.contains('active');form.classList.toggle('active',show);document.getElementById('showAddItemBtn').style.display=show?'none':'block';if(show){form.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('newItemName').focus(),250)}}
 function handleNewItemPhoto(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{newItemPhotoData=e.target.result;document.getElementById('newItemPhotoPlaceholder').innerHTML=`<img src="${e.target.result}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">`};reader.readAsDataURL(file)}
 async function addCatalogueItem(){
   const item_name=document.getElementById('newItemName').value.trim(),category=document.getElementById('newItemCategory').value.trim(),unit=document.getElementById('newItemUnit').value.trim(),min_qty=document.getElementById('newItemMinQty').value,current_qty=document.getElementById('newItemQty').value;
   if(!item_name){toast('❌ Enter item name',true);return}
-  showOverlay('Adding...');try{const p={op:'add',item_name,category,unit,min_qty,current_qty,pin:getAdminPin()};if(newItemPhotoData)p.ref_photo=newItemPhotoData.split(',')[1];const res=await api('catalogue',p);if(res.ok){document.getElementById('newItemName').value='';document.getElementById('newItemCategory').value='';document.getElementById('newItemQty').value='0';document.getElementById('newItemPhotoPlaceholder').innerHTML='📷';newItemPhotoData=null;document.getElementById('newItemPhotoInput').value='';const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue)}toast('✅ Item added')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
+  showOverlay('Adding...');try{const p={op:'add',item_name,category,unit,min_qty,current_qty,pin:getAdminPin()};if(newItemPhotoData)p.ref_photo=newItemPhotoData.split(',')[1];const res=await api('catalogue',p);if(res.ok){document.getElementById('newItemName').value='';document.getElementById('newItemCategory').value='';document.getElementById('newItemQty').value='0';document.getElementById('newItemPhotoPlaceholder').innerHTML='📷';newItemPhotoData=null;document.getElementById('newItemPhotoInput').value='';const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue);populateTransactionItems()}toggleCatalogueAddForm(false);toast('✅ Item added')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 function openEditCatModal(itemName){const item=catalogueCache.find(c=>c.item_name===itemName);if(!item)return;editingCatItem=itemName;editCatPhotoData=null;document.getElementById('editCatCategory').value=item.category||'';document.getElementById('editCatUnit').value=item.unit||'';document.getElementById('editCatMinQty').value=item.min_qty;document.getElementById('editCatQty').value=item.current_qty;const ph=document.getElementById('editCatPhotoPlaceholder'),photoUrl=photoUrlForItem(item);if(photoUrl)ph.innerHTML=`<img src="${escapeHtml(photoUrl)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='📷'">`;else ph.innerHTML='📷';document.getElementById('editCatModal').classList.add('active')}
 function closeEditCatModal(){editingCatItem=null;editCatPhotoData=null;document.getElementById('editCatModal').classList.remove('active')}
