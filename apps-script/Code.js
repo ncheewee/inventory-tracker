@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  INVENTORY TRACKER — Google Apps Script Backend  (v1.4.0)
+ *  INVENTORY TRACKER — Google Apps Script Backend  (v1.6.0-codex)
  *  Tabs: users, transactions, catalogue, sites
  * ═══════════════════════════════════════════════════════════════
  */
@@ -21,7 +21,7 @@ var DAILY_REPORT_HOUR  = 18;  // 6 PM — manager can change via setSchedule()
 // sites:        site_name, active
 
 function doGet(e) {
-  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.4.0' });
+  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.6.0-codex' });
 }
 
 function doPost(e) {
@@ -138,8 +138,21 @@ function verifyAdmin(pin) {
    ════════════════════════════════════════════════════════════ */
 
 function handleSites(body) {
-  if (body.op === 'add' || body.op === 'delete') {
+  if (body.op === 'add' || body.op === 'edit' || body.op === 'delete') {
     if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
+  }
+
+  if (body.op === 'edit') {
+    if (!body.old_site_name || !body.site_name) return { ok: false, error: 'Current and new site names are required' };
+    var editSheet = getSheet('sites');
+    var editData = editSheet.getDataRange().getValues();
+    for (var d = 1; d < editData.length; d++) {
+      if (String(editData[d][0]).trim() === String(body.site_name).trim() && String(editData[d][0]).trim() !== String(body.old_site_name).trim()) return { ok: false, error: 'Site already exists' };
+    }
+    for (var e = 1; e < editData.length; e++) {
+      if (String(editData[e][0]).trim() === String(body.old_site_name).trim()) { editSheet.getRange(e + 1, 1).setValue(String(body.site_name).trim()); return { ok: true }; }
+    }
+    return { ok: false, error: 'Site not found' };
   }
 
   if (body.op === 'add') {
@@ -220,6 +233,7 @@ function handleOCR(body) {
    ════════════════════════════════════════════════════════════ */
 
 function handleTransaction(body) {
+  if (body.type === 'out' && !String(body.destination || '').trim()) return { ok: false, error: 'Destination is required for Stock Out' };
   var ts = new Date().toISOString();
   var photoUrl = '';
   if (body.photo) {
@@ -259,12 +273,11 @@ function updateCatalogueStock(item, qty, type, ts) {
    ════════════════════════════════════════════════════════════ */
 
 function handleCatalogue(body) {
-  if (body.op === 'add' || body.op === 'edit' || body.op === 'import' || body.op === 'delete') {
+  if (body.op === 'add' || body.op === 'edit' || body.op === 'delete') {
     if (!verifyAdmin(body.pin)) return { ok: false, error: 'Manager access required' };
   }
   if (body.op === 'add')    return addCatalogueItem(body);
   if (body.op === 'edit')   return editCatalogueItem(body);
-  if (body.op === 'import') return importCatalogue(body);
   if (body.op === 'delete') return deleteCatalogueItem(body);
   return { ok: true, catalogue: getAllCatalogueItems() };
 }
@@ -330,34 +343,6 @@ function deleteCatalogueItem(body) {
     if (String(data[i][0]).trim() === String(body.item_name).trim()) { sheet.deleteRow(i + 1); return { ok: true }; }
   }
   return { ok: false, error: 'Item not found' };
-}
-
-function importCatalogue(body) {
-  if (!body.items || !body.items.length) return { ok: false, error: 'No items to import' };
-  var sheet = getSheet('catalogue');
-  var data = sheet.getDataRange().getValues();
-  var existing = {};
-  for (var i = 1; i < data.length; i++) { existing[String(data[i][0]).trim()] = i + 1; }
-  var added = 0, updated = 0;
-  var ts = new Date().toISOString();
-  body.items.forEach(function(item) {
-    if (!item.item_name) return;
-    var row = existing[String(item.item_name).trim()];
-    var rowData = [item.item_name, item.category || 'Uncategorized', item.unit || 'pcs',
-      item.min_qty != null ? Number(item.min_qty) : LOW_STOCK_THRESHOLD,
-      item.current_qty != null ? Number(item.current_qty) : 0, ts, item.ref_photo_url || ''];
-    if (row) {
-      var newQty = item.current_qty != null ? Number(item.current_qty) : Number(data[row - 1][4]);
-      sheet.getRange(row, 1, 1, 7).setValues([[
-        item.item_name, item.category || data[row - 1][1] || 'Uncategorized',
-        item.unit || data[row - 1][2] || 'pcs',
-        item.min_qty != null ? Number(item.min_qty) : Number(data[row - 1][3]),
-        newQty, ts, item.ref_photo_url || data[row - 1][6] || ''
-      ]]);
-      updated++;
-    } else { sheet.appendRow(rowData); existing[String(item.item_name).trim()] = sheet.getLastRow(); added++; }
-  });
-  return { ok: true, added: added, updated: updated, total: body.items.length };
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -572,7 +557,7 @@ function setup() {
   var hour = dailyHour ? parseInt(dailyHour) : DAILY_REPORT_HOUR;
   ScriptApp.newTrigger('sendDailyReport').timeBased().everyDays(1).atHour(hour).create();
 
-  Logger.log('✅ Setup complete (v1.4.0). Daily EOD trigger at ' + hour + ':00.');
+  Logger.log('✅ Setup complete (v1.6.0-codex). Daily EOD trigger at ' + hour + ':00.');
 }
 
 function seedCCTVCatalogue() {

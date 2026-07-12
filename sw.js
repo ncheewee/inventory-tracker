@@ -1,10 +1,16 @@
-const CACHE_NAME = 'inventory-tracker-v1.4.0';
+const CACHE_NAME = 'inventory-tracker-v1.6.0-codex';
 const ASSETS = [
   './',
   './index.html',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
+  './assets/catalogue/cable-trunking-25x25.jpg',
+  './assets/catalogue/cable-trunking-50x50.jpg',
+  './assets/catalogue/rg59-coax-roll.jpg',
+  './assets/catalogue/cctv-dome-camera.jpg',
+  './assets/catalogue/power-supply-12v-10a.jpg',
+  './assets/catalogue/buffered-saline.png',
 ];
 
 self.addEventListener('install', (e) => {
