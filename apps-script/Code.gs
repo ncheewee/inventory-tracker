@@ -277,7 +277,7 @@ function getAllCatalogueItems() {
     items.push({
       item_name: data[i][0], category: data[i][1], unit: data[i][2],
       min_qty: Number(data[i][3]), current_qty: Number(data[i][4]),
-      last_updated: data[i][5], ref_photo_url: data[i][6] || ''
+      last_updated: data[i][5], ref_photo_url: normalizeDriveImageUrl(data[i][6] || '')
     });
   }
   return items;
@@ -293,12 +293,13 @@ function addCatalogueItem(body) {
   var ts = new Date().toISOString();
   var refPhotoUrl = '';
   if (body.ref_photo) {
-    try { refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue'); } catch (e) { Logger.log('Ref photo upload failed: ' + e); }
+    try { refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue'); }
+    catch (e) { Logger.log('Ref photo upload failed: ' + e); return { ok: false, error: 'Reference photo upload failed: ' + e.message }; }
   }
   sheet.appendRow([body.item_name, body.category || 'Uncategorized', body.unit || 'pcs',
     body.min_qty != null ? Number(body.min_qty) : LOW_STOCK_THRESHOLD,
     body.current_qty != null ? Number(body.current_qty) : 0, ts, refPhotoUrl]);
-  return { ok: true };
+  return { ok: true, ref_photo_url: refPhotoUrl };
 }
 
 function editCatalogueItem(body) {
@@ -313,9 +314,10 @@ function editCatalogueItem(body) {
       if (body.current_qty != null) sheet.getRange(i + 1, 5).setValue(Number(body.current_qty));
       sheet.getRange(i + 1, 6).setValue(new Date().toISOString());
       if (body.ref_photo) {
-        try { var refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue'); sheet.getRange(i + 1, 7).setValue(refPhotoUrl); } catch (e) {}
+        try { var refPhotoUrl = uploadPhotoToDrive(body.ref_photo, 'ref_' + body.item_name, 'catalogue'); sheet.getRange(i + 1, 7).setValue(refPhotoUrl); }
+        catch (e) { Logger.log('Ref photo upload failed: ' + e); return { ok: false, error: 'Reference photo upload failed: ' + e.message }; }
       }
-      return { ok: true };
+      return { ok: true, ref_photo_url: body.ref_photo ? refPhotoUrl : normalizeDriveImageUrl(data[i][6] || '') };
     }
   }
   return { ok: false, error: 'Item not found' };
@@ -370,7 +372,14 @@ function uploadPhotoToDrive(base64Data, itemName, user) {
   var blob = Utilities.newBlob(Utilities.base64Decode(base64Data), 'image/jpeg', fileName);
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return file.getUrl();
+  return 'https://drive.google.com/thumbnail?id=' + file.getId() + '&sz=w400';
+}
+
+function normalizeDriveImageUrl(url) {
+  if (!url) return '';
+  var value = String(url).trim();
+  var match = value.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|thumbnail\?id=|uc\?(?:export=[^&]+&)?id=)([-\w]+)/i);
+  return match ? 'https://drive.google.com/thumbnail?id=' + match[1] + '&sz=w400' : value;
 }
 
 function getOrCreateFolder(name) {

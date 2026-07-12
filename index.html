@@ -126,6 +126,21 @@
   .data-table tr:last-child td{border-bottom:none}
   .table-card{background:var(--card);border-radius:12px;padding:12px;box-shadow:var(--shadow);overflow-x:auto}
 
+  /* Mobile catalogue list */
+  .catalogue-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 10px}
+  .catalogue-toolbar .selection-hint{font-size:12px;color:var(--muted);line-height:1.3}
+  .catalogue-toolbar .btn{width:auto;min-width:112px;padding:11px 16px;font-size:14px}
+  .catalogue-list{padding:0;overflow:hidden}
+  .catalogue-row{width:100%;display:grid;grid-template-columns:48px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px;border:0;border-bottom:1px solid var(--border);background:var(--card);color:var(--text);font:inherit;text-align:left;cursor:pointer}
+  .catalogue-row:last-child{border-bottom:0}
+  .catalogue-row.selected{background:#eff6ff;box-shadow:inset 3px 0 var(--blue)}
+  .catalogue-main{min-width:0}
+  .catalogue-name{font-size:14px;font-weight:700;line-height:1.3;overflow-wrap:anywhere}
+  .catalogue-meta{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin-top:5px;font-size:11px;color:var(--muted)}
+  .catalogue-stock{text-align:right;white-space:nowrap}
+  .catalogue-stock .qty{display:block;font-size:15px;font-weight:800}
+  .catalogue-stock .minimum{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+
   /* User rows */
   .user-row{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}
   .user-row:last-child{border-bottom:none}
@@ -218,7 +233,7 @@
     <button data-key="0">0</button>
     <button data-key="enter" class="enter">✓</button>
   </div>
-  <div class="version">v1.4.0</div>
+  <div class="version">v1.5.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -240,7 +255,7 @@
       <button class="mgr-btn" onclick="showReport()"><span class="ico">📨</span><span class="txt">Report</span></button>
     </div>
   </div>
-  <div class="version">v1.4.0</div>
+  <div class="version">v1.5.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: CAMERA -->
@@ -335,7 +350,11 @@
     <div class="hint">Columns: item_name, category, unit, min_qty, current_qty, ref_photo_url</div>
     <div class="file-name" id="importFileName"></div>
   </div>
-  <div class="table-card" id="catalogueTable"></div>
+  <div class="catalogue-toolbar">
+    <span class="selection-hint" id="catalogueSelectionHint">Select an item to edit</span>
+    <button class="btn btn-secondary" id="editCatalogueBtn" onclick="editSelectedCatalogueItem()" disabled>✏️ Edit item</button>
+  </div>
+  <div class="table-card catalogue-list" id="catalogueTable"></div>
 </div>
 
 <!-- SCREEN: SITES -->
@@ -402,6 +421,7 @@
         <input type="file" id="editCatPhotoInput" accept="image/*" onchange="handleEditCatPhoto(event)">
       </div>
     </div>
+    <button class="btn btn-danger" style="margin-top:16px" onclick="deleteEditingCatalogueItem()">🗑️ Delete item</button>
     <div class="btn-row"><button class="btn btn-secondary" onclick="closeEditCatModal()">Cancel</button><button class="btn btn-primary" onclick="saveEditCat()">Save</button></div>
   </div>
 </div>
@@ -414,13 +434,13 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION='v1.4.0';
+const APP_VERSION='v1.5.0-codex';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 const LOW_STOCK_THRESHOLD=20;
 
 let currentUser=null,currentUserPin=null,currentAction='in',pinBuffer='',cameraStream=null;
 let capturedBlob=null,capturedDataUrl=null,ocrResult=null,catalogueCache=[],sitesCache=[];
-let editingUserId=null,editingCatItem=null,newItemPhotoData=null,editCatPhotoData=null;
+let editingUserId=null,editingCatItem=null,selectedCatItem=null,newItemPhotoData=null,editCatPhotoData=null;
 let refPhotoTarget=null; // 'new' or 'edit' — which modal is capturing a photo
 
 const mockDB={
@@ -563,7 +583,7 @@ function filterPicker(){
   const matches=catalogueCache.filter(c=>c.item_name.toLowerCase().includes(query)).slice(0,8);
   if(!matches.length){results.classList.remove('active');return}
   results.innerHTML=matches.map(c=>{
-    const photo=c.ref_photo_url?`<img src="${escapeHtml(c.ref_photo_url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="placeholder" style="display:none;">📦</div>`:`<div class="placeholder">📦</div>`;
+    const photoUrl=normalisePhotoUrl(c.ref_photo_url);const photo=photoUrl?`<img src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="placeholder" style="display:none;">📦</div>`:`<div class="placeholder">📦</div>`;
     return `<div class="picker-item" onclick="selectItem('${escapeHtml(c.item_name).replace(/'/g,"\\'")}')">${photo}<div><div class="name">${escapeHtml(c.item_name)}</div><div class="cat">${escapeHtml(c.category||'')} · Stock: ${c.current_qty}</div></div></div>`;
   }).join('');
   results.classList.add('active');
@@ -730,16 +750,27 @@ async function showCatalogue(){
 }
 function renderCatalogue(items){
   const w=document.getElementById('catalogueTable');
-  if(!items.length){w.innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items yet.</p>';return}
-  w.innerHTML=`<table class="data-table"><thead><tr><th></th><th>Item</th><th>Cat</th><th>Qty</th><th>Min</th><th></th></tr></thead><tbody>${items.map(c=>{var low=Number(c.current_qty)<=Number(c.min_qty);var pc=c.ref_photo_url?`<img class="ref-photo" src="${escapeHtml(c.ref_photo_url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;return`<tr><td>${pc}</td><td style="font-weight:600">${escapeHtml(c.item_name)}<br><span style="font-size:11px;color:var(--muted)">${escapeHtml(c.unit||'')}</span></td><td><span class="cat-badge">${escapeHtml(c.category||'')}</span></td><td><span class="badge ${low?'low':'ok'}">${c.current_qty}</span></td><td style="font-size:12px;color:var(--muted)">${c.min_qty}</td><td><button class="icon-btn edit-btn" onclick="openEditCatModal('${escapeHtml(c.item_name).replace(/'/g,"\\'")}')">✏️</button><button class="icon-btn del-btn" onclick="deleteCatalogueItem('${escapeHtml(c.item_name).replace(/'/g,"\\'")}')">🗑️</button></td></tr>`}).join('')}</tbody></table>`;
+  if(!items.length){selectedCatItem=null;updateCatalogueSelection();w.innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items yet.</p>';return}
+  if(selectedCatItem&&!items.some(c=>c.item_name===selectedCatItem))selectedCatItem=null;
+  w.innerHTML=items.map(c=>{const low=Number(c.current_qty)<=Number(c.min_qty);const photoUrl=normalisePhotoUrl(c.ref_photo_url);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<button class="catalogue-row${selectedCatItem===c.item_name?' selected':''}" type="button" onclick="selectCatalogueItem('${safeName}')">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span></button>`}).join('');
+  updateCatalogueSelection();
 }
+function normalisePhotoUrl(url){
+  if(!url)return'';
+  const value=String(url).trim();
+  const driveMatch=value.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|thumbnail\?id=|uc\?(?:export=[^&]+&)?id=)([-\w]+)/i);
+  return driveMatch?`https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w400`:value;
+}
+function selectCatalogueItem(itemName){selectedCatItem=selectedCatItem===itemName?null:itemName;renderCatalogue(catalogueCache)}
+function updateCatalogueSelection(){const btn=document.getElementById('editCatalogueBtn'),hint=document.getElementById('catalogueSelectionHint');if(!btn||!hint)return;btn.disabled=!selectedCatItem;hint.textContent=selectedCatItem?'Selected: '+selectedCatItem:'Select an item to edit'}
+function editSelectedCatalogueItem(){if(selectedCatItem)openEditCatModal(selectedCatItem)}
 function handleNewItemPhoto(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{newItemPhotoData=e.target.result;document.getElementById('newItemPhotoPlaceholder').innerHTML=`<img src="${e.target.result}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">`};reader.readAsDataURL(file)}
 async function addCatalogueItem(){
   const item_name=document.getElementById('newItemName').value.trim(),category=document.getElementById('newItemCategory').value.trim(),unit=document.getElementById('newItemUnit').value.trim(),min_qty=document.getElementById('newItemMinQty').value,current_qty=document.getElementById('newItemQty').value;
   if(!item_name){toast('❌ Enter item name',true);return}
   showOverlay('Adding...');try{const p={op:'add',item_name,category,unit,min_qty,current_qty,pin:getAdminPin()};if(newItemPhotoData)p.ref_photo=newItemPhotoData.split(',')[1];const res=await api('catalogue',p);if(res.ok){document.getElementById('newItemName').value='';document.getElementById('newItemCategory').value='';document.getElementById('newItemQty').value='0';document.getElementById('newItemPhotoPlaceholder').innerHTML='📷';newItemPhotoData=null;document.getElementById('newItemPhotoInput').value='';const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue)}toast('✅ Item added')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
-function openEditCatModal(itemName){const item=catalogueCache.find(c=>c.item_name===itemName);if(!item)return;editingCatItem=itemName;editCatPhotoData=null;document.getElementById('editCatCategory').value=item.category||'';document.getElementById('editCatUnit').value=item.unit||'';document.getElementById('editCatMinQty').value=item.min_qty;document.getElementById('editCatQty').value=item.current_qty;const ph=document.getElementById('editCatPhotoPlaceholder');if(item.ref_photo_url)ph.innerHTML=`<img src="${escapeHtml(item.ref_photo_url)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" onerror="this.parentElement.innerHTML='📷'">`;else ph.innerHTML='📷';document.getElementById('editCatModal').classList.add('active')}
+function openEditCatModal(itemName){const item=catalogueCache.find(c=>c.item_name===itemName);if(!item)return;editingCatItem=itemName;editCatPhotoData=null;document.getElementById('editCatCategory').value=item.category||'';document.getElementById('editCatUnit').value=item.unit||'';document.getElementById('editCatMinQty').value=item.min_qty;document.getElementById('editCatQty').value=item.current_qty;const ph=document.getElementById('editCatPhotoPlaceholder'),photoUrl=normalisePhotoUrl(item.ref_photo_url);if(photoUrl)ph.innerHTML=`<img src="${escapeHtml(photoUrl)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='📷'">`;else ph.innerHTML='📷';document.getElementById('editCatModal').classList.add('active')}
 function closeEditCatModal(){editingCatItem=null;editCatPhotoData=null;document.getElementById('editCatModal').classList.remove('active')}
 function handleEditCatPhoto(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{editCatPhotoData=e.target.result;document.getElementById('editCatPhotoPlaceholder').innerHTML=`<img src="${e.target.result}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">`};reader.readAsDataURL(file)}
 async function saveEditCat(){
@@ -747,6 +778,7 @@ async function saveEditCat(){
   showOverlay('Saving...');try{const res=await api('catalogue',p);if(res.ok){closeEditCatModal();const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue)}toast('✅ Item updated')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 async function deleteCatalogueItem(itemName){if(!confirm('Delete "'+itemName+'"?'))return;showOverlay('Deleting...');try{const res=await api('catalogue',{op:'delete',item_name:itemName,pin:getAdminPin()});if(res.ok){const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue)}toast('✅ Item deleted')}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}}
+function deleteEditingCatalogueItem(){if(!editingCatItem)return;const itemName=editingCatItem;closeEditCatModal();deleteCatalogueItem(itemName)}
 
 /* ══ SITES ══ */
 async function showSites(){
@@ -784,7 +816,7 @@ async function showHistory(){
 /* ══ STOCK LEVELS ══ */
 async function showInventory(){
   showScreen('screen-inventory');showOverlay('Loading...');
-  try{const res=await api('catalogue');if(res.ok){const inv=res.catalogue||[];if(!inv.length){document.getElementById('inventoryTable').innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items.</p>'}else{document.getElementById('inventoryTable').innerHTML=`<table class="data-table"><thead><tr><th></th><th>Item</th><th>Qty</th><th>Min</th><th>Updated</th></tr></thead><tbody>${inv.map(i=>{var low=Number(i.current_qty)<=Number(i.min_qty);var pc=i.ref_photo_url?`<img class="ref-photo" src="${escapeHtml(i.ref_photo_url)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;return`<tr><td>${pc}</td><td style="font-weight:600">${escapeHtml(i.item_name)}<br><span style="font-size:11px;color:var(--muted)">${escapeHtml(i.category||'')} · ${escapeHtml(i.unit||'')}</span></td><td><span class="badge ${low?'low':'ok'}">${i.current_qty}</span>${low?' ⚠️':''}</td><td style="font-size:12px;color:var(--muted)">${i.min_qty}</td><td style="font-size:12px;color:var(--muted)">${formatTime(i.last_updated)}</td></tr>`}).join('')}</tbody></table>`}}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
+  try{const res=await api('catalogue');if(res.ok){const inv=res.catalogue||[];if(!inv.length){document.getElementById('inventoryTable').innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items.</p>'}else{document.getElementById('inventoryTable').innerHTML=`<table class="data-table"><thead><tr><th></th><th>Item</th><th>Qty</th><th>Min</th><th>Updated</th></tr></thead><tbody>${inv.map(i=>{var low=Number(i.current_qty)<=Number(i.min_qty);var photoUrl=normalisePhotoUrl(i.ref_photo_url);var pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;return`<tr><td>${pc}</td><td style="font-weight:600">${escapeHtml(i.item_name)}<br><span style="font-size:11px;color:var(--muted)">${escapeHtml(i.category||'')} · ${escapeHtml(i.unit||'')}</span></td><td><span class="badge ${low?'low':'ok'}">${i.current_qty}</span>${low?' ⚠️':''}</td><td style="font-size:12px;color:var(--muted)">${i.min_qty}</td><td style="font-size:12px;color:var(--muted)">${formatTime(i.last_updated)}</td></tr>`}).join('')}</tbody></table>`}}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 
 /* ══ REPORT (in-app + Telegram EOD) ══ */
