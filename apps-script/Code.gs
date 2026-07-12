@@ -378,7 +378,7 @@ function getOrCreateFolder(name) {
    TELEGRAM (for daily EOD report only)
    ════════════════════════════════════════════════════════════ */
 
-function sendTelegram(token, chatId, text) {
+function sendTelegram(token, chatId, text, migrationAttempted) {
   var response = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
     method: 'post', contentType: 'application/json',
     payload: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' }),
@@ -391,6 +391,14 @@ function sendTelegram(token, chatId, text) {
     result = JSON.parse(raw);
   } catch (err) {
     return { ok: false, error: 'Telegram returned HTTP ' + status + ': ' + raw };
+  }
+  var migratedChatId = result.parameters && result.parameters.migrate_to_chat_id;
+  if (!migrationAttempted && migratedChatId) {
+    var newChatId = String(migratedChatId);
+    PropertiesService.getScriptProperties().setProperty('TELEGRAM_CHAT_ID', newChatId);
+    var retry = sendTelegram(token, newChatId, text, true);
+    retry.migrated_chat_id = newChatId;
+    return retry;
   }
   if (status < 200 || status >= 300 || !result.ok) {
     return {
