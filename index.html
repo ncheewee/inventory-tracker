@@ -137,8 +137,16 @@
   .catalogue-stock{text-align:right;white-space:nowrap}
   .catalogue-stock .qty{display:block;font-size:15px;font-weight:800}
   .catalogue-stock .minimum{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
-  .catalogue-inline-edit{grid-column:2/4;width:100%;margin-top:1px;padding:9px 12px;border:0;border-radius:10px;background:var(--blue);color:#fff;font-size:13px;font-weight:750;cursor:pointer}
   .catalogue-add-toggle{margin-top:16px}
+
+  /* Visual item picker */
+  .item-picker-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;max-height:330px;overflow-y:auto;padding:2px}
+  .item-choice{min-width:0;border:2px solid var(--border);border-radius:14px;background:var(--card);padding:9px;text-align:left;color:var(--text);cursor:pointer;transition:border-color .15s,background .15s,transform .1s}
+  .item-choice:active{transform:scale(.97)}.item-choice.selected{border-color:var(--blue);background:#eff6ff;box-shadow:0 0 0 2px #dbeafe}
+  .item-choice img,.item-choice .placeholder{width:100%;height:86px;border-radius:9px;object-fit:cover;background:var(--bg);display:flex;align-items:center;justify-content:center;font-size:30px}
+  .item-choice .item-choice-name{display:block;margin-top:7px;font-size:12px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
+  .item-choice .item-choice-stock{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
+  .item-choice.add-new{border-style:dashed;display:flex;min-height:137px;align-items:center;justify-content:center;text-align:center;color:var(--blue);font-weight:800}
   #catalogueAddForm{display:none;margin-top:12px}
   #catalogueAddForm.active{display:block}
 
@@ -212,9 +220,12 @@
 
   /* Photo viewer */
   .stock-photo-btn{display:block;border:0;background:none;padding:0;cursor:zoom-in}
-  .photo-viewer{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.9);display:none;align-items:center;justify-content:center;padding:24px}
-  .photo-viewer.active{display:flex}.photo-viewer img{max-width:100%;max-height:82vh;border-radius:16px;object-fit:contain;background:#fff;box-shadow:0 12px 50px rgba(0,0,0,.4)}
-  .photo-viewer button{position:absolute;top:18px;right:18px;width:44px;height:44px;border:0;border-radius:50%;background:#fff;color:var(--text);font-size:22px;font-weight:800;cursor:pointer}
+  .photo-viewer{position:fixed;inset:0;z-index:80;background:rgba(15,23,42,.94);display:none;align-items:center;justify-content:center;padding:20px}
+  .photo-viewer.active{display:flex}.photo-viewer-card{width:100%;max-width:440px;max-height:92vh;overflow-y:auto;border-radius:18px;background:var(--card);box-shadow:0 12px 50px rgba(0,0,0,.4)}
+  .photo-viewer-card>img{display:block;width:100%;max-height:58vh;object-fit:contain;background:#fff;border-radius:18px 18px 0 0}
+  .photo-viewer-close{position:fixed;top:14px;right:14px;width:44px;height:44px;border:0;border-radius:50%;background:#fff;color:var(--text);font-size:22px;font-weight:800;cursor:pointer;z-index:2}
+  .photo-viewer-info{display:none;padding:16px}.photo-viewer-info.active{display:block}.photo-viewer-info h3{font-size:18px;line-height:1.3;margin-bottom:8px}.photo-viewer-facts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .photo-viewer-edit{width:100%;padding:13px;border:0;border-radius:12px;background:var(--blue);color:#fff;font-size:15px;font-weight:800;cursor:pointer}
 </style>
 </head>
 <body>
@@ -244,7 +255,7 @@
     <button data-key="0">0</button>
     <button data-key="enter" class="enter">✓</button>
   </div>
-  <div class="version">v1.7.0 · CODEX</div>
+  <div class="version">v1.8.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -266,7 +277,7 @@
       <button class="mgr-btn" onclick="showReport()"><span class="ico">📨</span><span class="txt">Report</span></button>
     </div>
   </div>
-  <div class="version">v1.7.0 · CODEX</div>
+  <div class="version">v1.8.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: CAMERA -->
@@ -284,7 +295,8 @@
   <img class="photo-thumb" id="photoThumb" alt="captured">
   <div class="field">
     <label>📦 Item</label>
-    <select id="itemSelect" onchange="toggleNewTransactionItem()"></select>
+    <div class="item-picker-grid" id="itemPickerGrid"></div>
+    <input type="hidden" id="itemSelect">
     <input type="text" id="newTransactionItem" placeholder="Enter new item name" style="display:none;margin-top:8px">
   </div>
   <div class="field">
@@ -333,8 +345,12 @@
 <!-- SCREEN: CATALOGUE -->
 <div class="screen" id="screen-catalogue">
   <div class="table-card catalogue-list" id="catalogueTable"></div>
-  <button class="btn btn-primary catalogue-add-toggle" id="showAddItemBtn" onclick="toggleCatalogueAddForm()">➕ Add Item</button>
-  <div class="form-card" id="catalogueAddForm">
+  <button class="btn btn-primary catalogue-add-toggle" id="showAddItemBtn" onclick="openAddCatModal()">➕ Add Item</button>
+</div>
+
+<!-- Add Catalogue Item Modal -->
+<div class="modal-overlay" id="addCatModal">
+  <div class="modal" id="catalogueAddForm">
     <div style="font-size:17px;font-weight:750;margin-bottom:14px">Add catalogue item</div>
     <div class="field"><label>📦 Item Name</label><input type="text" id="newItemName" placeholder="e.g. Cable Trunking 75x50mm"></div>
     <div class="field"><label>🏷️ Category</label><input type="text" id="newItemCategory" placeholder="e.g. Trunking" list="categoryList"><datalist id="categoryList"></datalist></div>
@@ -354,7 +370,7 @@
         <input type="file" id="newItemPhotoInput" accept="image/*" onchange="handleNewItemPhoto(event)">
       </div>
     </div>
-    <div class="btn-row"><button class="btn btn-secondary" onclick="toggleCatalogueAddForm(false)">Cancel</button><button class="btn btn-primary" onclick="addCatalogueItem()">Save Item</button></div>
+    <div class="btn-row"><button class="btn btn-secondary" onclick="closeAddCatModal()">Cancel</button><button class="btn btn-primary" onclick="addCatalogueItem()">Save Item</button></div>
   </div>
 </div>
 
@@ -392,8 +408,15 @@
 
 <!-- Stock photo viewer -->
 <div class="photo-viewer" id="photoViewer" onclick="if(event.target===this)closePhotoViewer()">
-  <button onclick="closePhotoViewer()" aria-label="Close photo">✕</button>
-  <img id="photoViewerImage" alt="Enlarged stock item">
+  <button class="photo-viewer-close" onclick="closePhotoViewer()" aria-label="Close photo">✕</button>
+  <div class="photo-viewer-card">
+    <img id="photoViewerImage" alt="Enlarged stock item">
+    <div class="photo-viewer-info" id="photoViewerInfo">
+      <h3 id="photoViewerTitle"></h3>
+      <div class="photo-viewer-facts" id="photoViewerFacts"></div>
+      <button class="photo-viewer-edit" id="photoViewerEditBtn">✏️ Edit item</button>
+    </div>
+  </div>
 </div>
 
 <!-- Edit User Modal -->
@@ -441,7 +464,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION='v1.7.0-codex';
+const APP_VERSION='v1.8.0-codex';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 const LOW_STOCK_THRESHOLD=20;
 const STOCK_ITEM_PHOTOS={
@@ -589,14 +612,15 @@ async function loadSites(){
   try{const res=await api('sites');if(res.ok){sitesCache=res.sites||[]}}catch(e){}
 }
 
-/* ══ TRANSACTION ITEM DROPDOWN ══ */
+/* ══ VISUAL TRANSACTION ITEM PICKER ══ */
 function populateTransactionItems(preferredName=''){
-  const sel=document.getElementById('itemSelect');
-  sel.innerHTML='<option value="">Choose an existing item…</option>'+catalogueCache.map(c=>`<option value="${escapeHtml(c.item_name)}">${escapeHtml(c.item_name)} · ${c.current_qty} ${escapeHtml(c.unit||'')}</option>`).join('')+'<option value="__new__">➕ Add new item</option>';
   const match=catalogueCache.find(c=>c.item_name.toLowerCase()===String(preferredName).trim().toLowerCase());
-  if(match)sel.value=match.item_name;else if(preferredName){sel.value='__new__';document.getElementById('newTransactionItem').value=preferredName}
-  toggleNewTransactionItem();
+  document.getElementById('itemSelect').value=match?match.item_name:(preferredName?'__new__':'');
+  document.getElementById('newTransactionItem').value=match?'':preferredName;
+  renderTransactionItems();toggleNewTransactionItem();
 }
+function renderTransactionItems(){const selected=document.getElementById('itemSelect').value;document.getElementById('itemPickerGrid').innerHTML=catalogueCache.map((c,i)=>{const photo=photoUrlForItem(c);return`<button type="button" class="item-choice${selected===c.item_name?' selected':''}" onclick="chooseTransactionItem(${i})">${photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`:'<span class="placeholder">📦</span>'}<span class="item-choice-name">${escapeHtml(c.item_name)}</span><span class="item-choice-stock">${c.current_qty} ${escapeHtml(c.unit||'')} available</span></button>`}).join('')+`<button type="button" class="item-choice add-new${selected==='__new__'?' selected':''}" onclick="chooseTransactionItem(-1)"><span>➕<br>Add new item</span></button>`}
+function chooseTransactionItem(index){document.getElementById('itemSelect').value=index<0?'__new__':catalogueCache[index].item_name;renderTransactionItems();toggleNewTransactionItem()}
 function toggleNewTransactionItem(){const isNew=document.getElementById('itemSelect').value==='__new__',input=document.getElementById('newTransactionItem');input.style.display=isNew?'block':'none';if(isNew)input.focus()}
 function getTransactionItem(){const selected=document.getElementById('itemSelect').value;return selected==='__new__'?document.getElementById('newTransactionItem').value.trim():selected}
 
@@ -747,14 +771,14 @@ async function deleteUser(id){if(!confirm('Delete this user?'))return;showOverla
 
 /* ══ CATALOGUE ══ */
 async function showCatalogue(){
-  showScreen('screen-catalogue');toggleCatalogueAddForm(false);showOverlay('Loading...');
+  showScreen('screen-catalogue');closeAddCatModal();showOverlay('Loading...');
   try{const res=await api('catalogue');if(res.ok){catalogueCache=res.catalogue||[];renderCatalogue(catalogueCache);updateCategoryList()}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 function renderCatalogue(items){
   const w=document.getElementById('catalogueTable');
   if(!items.length){selectedCatItem=null;w.innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items yet.</p>';return}
   if(selectedCatItem&&!items.some(c=>c.item_name===selectedCatItem))selectedCatItem=null;
-  w.innerHTML=items.map(c=>{const selected=selectedCatItem===c.item_name,low=Number(c.current_qty)<=Number(c.min_qty),photoUrl=photoUrlForItem(c);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<div class="catalogue-row${selected?' selected':''}" role="button" tabindex="0" onclick="selectCatalogueItem('${safeName}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCatalogueItem('${safeName}')} ">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span>${selected?`<button class="catalogue-inline-edit" onclick="event.stopPropagation();openEditCatModal('${safeName}')">✏️ Edit this item</button>`:''}</div>`}).join('');
+  w.innerHTML=items.map(c=>{const selected=selectedCatItem===c.item_name,low=Number(c.current_qty)<=Number(c.min_qty),photoUrl=photoUrlForItem(c);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<div class="catalogue-row${selected?' selected':''}" role="button" tabindex="0" onclick="selectCatalogueItem('${safeName}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectCatalogueItem('${safeName}')} ">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span></div>`}).join('');
 }
 function normalisePhotoUrl(url){
   if(!url)return'';
@@ -763,13 +787,14 @@ function normalisePhotoUrl(url){
   return driveMatch?`https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w400`:value;
 }
 function photoUrlForItem(item){return normalisePhotoUrl(item&&item.ref_photo_url)||STOCK_ITEM_PHOTOS[String(item&&item.item_name||'').trim().toLowerCase()]||''}
-function selectCatalogueItem(itemName){selectedCatItem=itemName;renderCatalogue(catalogueCache);const item=catalogueCache.find(c=>c.item_name===itemName),photo=item&&photoUrlForItem(item);if(photo)openPhotoViewer(photo)}
-function toggleCatalogueAddForm(force){const form=document.getElementById('catalogueAddForm'),show=typeof force==='boolean'?force:!form.classList.contains('active');form.classList.toggle('active',show);document.getElementById('showAddItemBtn').style.display=show?'none':'block';if(show){form.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('newItemName').focus(),250)}}
+function selectCatalogueItem(itemName){selectedCatItem=itemName;renderCatalogue(catalogueCache);const item=catalogueCache.find(c=>c.item_name===itemName);if(item)openPhotoViewer(photoUrlForItem(item),item)}
+function openAddCatModal(){document.getElementById('addCatModal').classList.add('active');setTimeout(()=>document.getElementById('newItemName').focus(),150)}
+function closeAddCatModal(){document.getElementById('addCatModal').classList.remove('active')}
 function handleNewItemPhoto(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{newItemPhotoData=e.target.result;document.getElementById('newItemPhotoPlaceholder').innerHTML=`<img src="${e.target.result}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">`};reader.readAsDataURL(file)}
 async function addCatalogueItem(){
   const item_name=document.getElementById('newItemName').value.trim(),category=document.getElementById('newItemCategory').value.trim(),unit=document.getElementById('newItemUnit').value.trim(),min_qty=document.getElementById('newItemMinQty').value,current_qty=document.getElementById('newItemQty').value;
   if(!item_name){toast('❌ Enter item name',true);return}
-  showOverlay('Adding...');try{const p={op:'add',item_name,category,unit,min_qty,current_qty,pin:getAdminPin()};if(newItemPhotoData)p.ref_photo=newItemPhotoData.split(',')[1];const res=await api('catalogue',p);if(res.ok){document.getElementById('newItemName').value='';document.getElementById('newItemCategory').value='';document.getElementById('newItemQty').value='0';document.getElementById('newItemPhotoPlaceholder').innerHTML='📷';newItemPhotoData=null;document.getElementById('newItemPhotoInput').value='';const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue);populateTransactionItems()}toggleCatalogueAddForm(false);toast('✅ Item added')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
+  showOverlay('Adding...');try{const p={op:'add',item_name,category,unit,min_qty,current_qty,pin:getAdminPin()};if(newItemPhotoData)p.ref_photo=newItemPhotoData.split(',')[1];const res=await api('catalogue',p);if(res.ok){document.getElementById('newItemName').value='';document.getElementById('newItemCategory').value='';document.getElementById('newItemQty').value='0';document.getElementById('newItemPhotoPlaceholder').innerHTML='📷';newItemPhotoData=null;document.getElementById('newItemPhotoInput').value='';const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue);populateTransactionItems()}closeAddCatModal();toast('✅ Item added')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 function openEditCatModal(itemName){const item=catalogueCache.find(c=>c.item_name===itemName);if(!item)return;editingCatItem=itemName;editCatPhotoData=null;document.getElementById('editCatCategory').value=item.category||'';document.getElementById('editCatUnit').value=item.unit||'';document.getElementById('editCatMinQty').value=item.min_qty;document.getElementById('editCatQty').value=item.current_qty;const ph=document.getElementById('editCatPhotoPlaceholder'),photoUrl=photoUrlForItem(item);if(photoUrl)ph.innerHTML=`<img src="${escapeHtml(photoUrl)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='📷'">`;else ph.innerHTML='📷';document.getElementById('editCatModal').classList.add('active')}
 function closeEditCatModal(){editingCatItem=null;editCatPhotoData=null;document.getElementById('editCatModal').classList.remove('active')}
@@ -809,8 +834,8 @@ async function showInventory(){
   showScreen('screen-inventory');showOverlay('Loading...');
   try{const res=await api('catalogue');if(res.ok){const inv=res.catalogue||[];if(!inv.length){document.getElementById('inventoryTable').innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items.</p>'}else{document.getElementById('inventoryTable').innerHTML=`<table class="data-table"><thead><tr><th></th><th>Item</th><th>Qty</th><th>Min</th><th>Updated</th></tr></thead><tbody>${inv.map(i=>{var low=Number(i.current_qty)<=Number(i.min_qty);var photoUrl=photoUrlForItem(i);var pc=photoUrl?`<button class="stock-photo-btn" onclick="openPhotoViewer('${escapeHtml(photoUrl).replace(/'/g,"\\'")}')" aria-label="Enlarge ${escapeHtml(i.item_name)} photo"><img class="ref-photo" src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.parentElement.style.display='none';this.parentElement.nextElementSibling.style.display='flex'"></button><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;return`<tr><td>${pc}</td><td style="font-weight:600">${escapeHtml(i.item_name)}<br><span style="font-size:11px;color:var(--muted)">${escapeHtml(i.category||'')} · ${escapeHtml(i.unit||'')}</span></td><td><span class="badge ${low?'low':'ok'}">${i.current_qty}</span>${low?' ⚠️':''}</td><td style="font-size:12px;color:var(--muted)">${i.min_qty}</td><td style="font-size:12px;color:var(--muted)">${formatTime(i.last_updated)}</td></tr>`}).join('')}</tbody></table>`}}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
-function openPhotoViewer(url){document.getElementById('photoViewerImage').src=url;document.getElementById('photoViewer').classList.add('active')}
-function closePhotoViewer(){document.getElementById('photoViewer').classList.remove('active');document.getElementById('photoViewerImage').src=''}
+function openPhotoViewer(url,item=null){const img=document.getElementById('photoViewerImage'),info=document.getElementById('photoViewerInfo');img.src=url||'';img.style.display=url?'block':'none';info.classList.toggle('active',!!item);if(item){document.getElementById('photoViewerTitle').textContent=item.item_name;document.getElementById('photoViewerFacts').innerHTML=`<span class="cat-badge">${escapeHtml(item.category||'Uncategorized')}</span><span class="badge ${Number(item.current_qty)<=Number(item.min_qty)?'low':'ok'}">${item.current_qty} ${escapeHtml(item.unit||'')} in stock</span><span class="badge">Min ${item.min_qty}</span>`;document.getElementById('photoViewerEditBtn').onclick=()=>{closePhotoViewer();openEditCatModal(item.item_name)}}document.getElementById('photoViewer').classList.add('active')}
+function closePhotoViewer(){document.getElementById('photoViewer').classList.remove('active');document.getElementById('photoViewerImage').src='';document.getElementById('photoViewerInfo').classList.remove('active')}
 
 /* ══ REPORT (in-app + Telegram EOD) ══ */
 async function showReport(){
@@ -870,6 +895,7 @@ document.getElementById('qtyInput').addEventListener('wheel',e=>e.preventDefault
 document.getElementById('demoBanner').style.display=isDemo?'block':'none';
 document.getElementById('editUserModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditUserModal()});
 document.getElementById('editCatModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditCatModal()});
+document.getElementById('addCatModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAddCatModal()});
 
 /* PWA */
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
