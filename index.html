@@ -147,6 +147,11 @@
   .item-choice .item-choice-name{display:block;margin-top:7px;font-size:12px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
   .item-choice .item-choice-stock{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
   .item-choice.add-new{border-style:dashed;display:flex;min-height:137px;align-items:center;justify-content:center;text-align:center;color:var(--blue);font-weight:800}
+  .detection-row{display:none;align-items:center;gap:8px;flex-wrap:wrap;margin-top:9px}.detection-row.active{display:flex}
+  .detection-chip{display:inline-flex;align-items:center;gap:4px;padding:5px 9px;border-radius:999px;background:#dcfce7;color:#166534;font-size:11px;font-weight:800}
+  .change-item-chip{border:1px solid #bfdbfe;border-radius:999px;background:#eff6ff;color:var(--blue);padding:5px 10px;font-size:11px;font-weight:800;cursor:pointer}
+  .destination-chips{display:flex;flex-wrap:wrap;gap:8px}.destination-chip{border:2px solid var(--border);border-radius:999px;background:var(--card);color:var(--text);padding:9px 13px;font-size:13px;font-weight:700;cursor:pointer}
+  .destination-chip.selected{border-color:var(--blue);background:#dbeafe;color:#1e40af}
 
   /* User rows */
   .user-row{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}
@@ -204,7 +209,8 @@
   .report-section{background:var(--card);border-radius:14px;padding:16px;box-shadow:var(--shadow)}
   .report-section h3{font-size:15px;margin-bottom:11px}.report-empty{font-size:13px;color:var(--muted);padding:6px 0}
   .report-list{display:flex;flex-direction:column;gap:8px}.report-list-row{display:flex;align-items:center;gap:9px;font-size:13px}
-  .report-list-row .main{min-width:0;flex:1;font-weight:650}.report-list-row .sub{font-size:11px;color:var(--muted)}
+  .report-list-row .main{min-width:0;flex:1;font-weight:650}.report-list-row .sub{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px;font-size:11px;color:var(--muted)}
+  .report-user-chip{display:inline-flex;padding:3px 7px;border-radius:999px;background:#ede9fe;color:#6d28d9;font-size:10px;font-weight:800}
   .report-list-row .value{font-weight:800;white-space:nowrap}.report-progress{height:6px;background:var(--bg);border-radius:999px;overflow:hidden;margin-top:4px}.report-progress span{display:block;height:100%;background:var(--red);border-radius:999px}
   .schedule-card{background:var(--card);border-radius:12px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
   .schedule-card .row{display:flex;align-items:center;justify-content:space-between;gap:12px}
@@ -253,7 +259,7 @@
     <button data-key="0">0</button>
     <button data-key="enter" class="enter">✓</button>
   </div>
-  <div class="version">v1.8.1 · CODEX</div>
+  <div class="version">v1.9.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -275,7 +281,7 @@
       <button class="mgr-btn" onclick="showReport()"><span class="ico">📨</span><span class="txt">Report</span></button>
     </div>
   </div>
-  <div class="version">v1.8.1 · CODEX</div>
+  <div class="version">v1.9.0 · CODEX</div>
 </div>
 
 <!-- SCREEN: CAMERA -->
@@ -296,6 +302,7 @@
     <button type="button" class="btn btn-secondary" id="chooseItemBtn" onclick="openItemPickerModal()">Choose item</button>
     <input type="hidden" id="itemSelect">
     <input type="text" id="newTransactionItem" placeholder="Enter new item name" style="display:none;margin-top:8px">
+    <div class="detection-row" id="itemDetectionRow"><span class="detection-chip">✨ AI detected</span><button type="button" class="change-item-chip" onclick="openItemPickerModal()">Change item</button></div>
   </div>
   <div class="field">
     <label>🔢 Quantity</label>
@@ -307,7 +314,8 @@
   </div>
   <div class="field" id="destinationField">
     <label>📍 Destination</label>
-    <select id="destSelect" onchange="toggleCustomDestination()"></select>
+    <div class="destination-chips" id="destinationChips"></div>
+    <input type="hidden" id="destSelect">
     <input type="text" id="customDestination" placeholder="Type destination" style="display:none;margin-top:8px">
   </div>
   <div class="btn-row">
@@ -471,7 +479,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION='v1.8.1-codex';
+const APP_VERSION='v1.9.0-codex';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 const LOW_STOCK_THRESHOLD=20;
 const STOCK_ITEM_PHOTOS={
@@ -620,15 +628,15 @@ async function loadSites(){
 }
 
 /* ══ VISUAL TRANSACTION ITEM PICKER ══ */
-function populateTransactionItems(preferredName=''){
+function populateTransactionItems(preferredName='',aiDetected=false){
   const match=catalogueCache.find(c=>c.item_name.toLowerCase()===String(preferredName).trim().toLowerCase());
   const allowNew=currentAction==='in';
   document.getElementById('itemSelect').value=match?match.item_name:(preferredName&&allowNew?'__new__':'');
   document.getElementById('newTransactionItem').value=match||!allowNew?'':preferredName;
-  renderTransactionItems();toggleNewTransactionItem();
+  renderTransactionItems();toggleNewTransactionItem();document.getElementById('itemDetectionRow').classList.toggle('active',!!(aiDetected&&match));
 }
 function renderTransactionItems(){const selected=document.getElementById('itemSelect').value,newCard=currentAction==='in'?`<button type="button" class="item-choice add-new${selected==='__new__'?' selected':''}" onclick="chooseTransactionItem(-1)"><span>➕<br>Add new item</span></button>`:'';document.getElementById('itemPickerGrid').innerHTML=catalogueCache.map((c,i)=>{const photo=photoUrlForItem(c);return`<button type="button" class="item-choice${selected===c.item_name?' selected':''}" onclick="chooseTransactionItem(${i})">${photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`:'<span class="placeholder">📦</span>'}<span class="item-choice-name">${escapeHtml(c.item_name)}</span><span class="item-choice-stock">${c.current_qty} ${escapeHtml(c.unit||'')} available</span></button>`}).join('')+newCard}
-function chooseTransactionItem(index){if(index<0&&currentAction!=='in')return;document.getElementById('itemSelect').value=index<0?'__new__':catalogueCache[index].item_name;renderTransactionItems();toggleNewTransactionItem();closeItemPickerModal()}
+function chooseTransactionItem(index){if(index<0&&currentAction!=='in')return;document.getElementById('itemSelect').value=index<0?'__new__':catalogueCache[index].item_name;document.getElementById('itemDetectionRow').classList.remove('active');renderTransactionItems();toggleNewTransactionItem();closeItemPickerModal()}
 function toggleNewTransactionItem(){const selected=document.getElementById('itemSelect').value,isNew=selected==='__new__',input=document.getElementById('newTransactionItem'),button=document.getElementById('chooseItemBtn');input.style.display=isNew?'block':'none';button.textContent=isNew?'➕ New item':selected||'Choose item';if(isNew)input.focus()}
 function openItemPickerModal(){renderTransactionItems();document.getElementById('itemPickerModal').classList.add('active')}
 function closeItemPickerModal(){document.getElementById('itemPickerModal').classList.remove('active')}
@@ -700,10 +708,10 @@ async function captureRefPhoto(target){
 
 /* ══ OCR ══ */
 async function runOCR(){
-  showOverlay('⏳ Reading photo...');
+  showOverlay('✨ Detecting items...');
   try{
     const res=await api('ocr',{photo:capturedDataUrl.split(',')[1]});
-    if(res.ok&&res.ocr){ocrResult=res.ocr;populateTransactionItems(res.ocr.item||'');document.getElementById('qtyInput').value=res.ocr.qty||1}
+    if(res.ok&&res.ocr){ocrResult=res.ocr;populateTransactionItems(res.ocr.item||'',true);document.getElementById('qtyInput').value=res.ocr.qty||1}
     else{populateTransactionItems();document.getElementById('qtyInput').value=1;toast('⚠️ Could not read photo. Select an item manually.',true)}
   }catch(err){toast('OCR error: '+err.message,true);populateTransactionItems();document.getElementById('qtyInput').value=1}
   finally{
@@ -716,15 +724,13 @@ async function runOCR(){
 }
 
 function populateDestinations(){
-  const sel=document.getElementById('destSelect');
   document.getElementById('destinationField').style.display=currentAction==='out'?'block':'none';
   document.getElementById('customDestination').style.display='none';
   document.getElementById('customDestination').value='';
-  let html='<option value="">Choose destination…</option>'+sitesCache.map(s=>`<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
-  html+=`<option value="__custom__">✏️ Custom (type your own)</option>`;
-  sel.innerHTML=html;
+  document.getElementById('destSelect').value='';renderDestinationChips();
 }
-function toggleCustomDestination(){const custom=document.getElementById('customDestination'),isCustom=document.getElementById('destSelect').value==='__custom__';custom.style.display=isCustom?'block':'none';if(isCustom)custom.focus()}
+function renderDestinationChips(){const selected=document.getElementById('destSelect').value;document.getElementById('destinationChips').innerHTML=sitesCache.map((s,i)=>`<button type="button" class="destination-chip${selected===s?' selected':''}" onclick="selectDestination(${i})">${escapeHtml(s)}</button>`).join('')+`<button type="button" class="destination-chip${selected==='__custom__'?' selected':''}" onclick="selectDestination(-1)">✏️ Custom</button>`}
+function selectDestination(index){const value=index<0?'__custom__':sitesCache[index];document.getElementById('destSelect').value=value;const custom=document.getElementById('customDestination');custom.style.display=value==='__custom__'?'block':'none';renderDestinationChips();if(value==='__custom__')custom.focus()}
 function getDestination(){const selected=document.getElementById('destSelect').value;return selected==='__custom__'?document.getElementById('customDestination').value.trim():selected}
 
 /* ══ VERIFY & CONFIRM ══ */
@@ -876,7 +882,7 @@ function renderVisualReport(transactions,catalogue){
   const maxDest=Math.max(1,...Object.values(byDest));
   const destRows=Object.entries(byDest).sort((a,b)=>b[1]-a[1]).map(([name,qty])=>`<div class="report-list-row"><span>📍</span><span class="main">${escapeHtml(name)}<span class="report-progress"><span style="width:${Math.round(qty/maxDest*100)}%;background:var(--blue)"></span></span></span><span class="value">${qty}</span></div>`).join('');
   const lowRows=low.sort((a,b)=>(Number(a.current_qty)-Number(a.min_qty))-(Number(b.current_qty)-Number(b.min_qty))).map(c=>{const pct=Math.max(0,Math.min(100,Math.round(Number(c.current_qty)/Math.max(1,Number(c.min_qty))*100)));return`<div class="report-list-row"><span>⚠️</span><span class="main">${escapeHtml(c.item_name)}<span class="sub">${c.current_qty} ${escapeHtml(c.unit||'')} on hand · minimum ${c.min_qty}</span><span class="report-progress"><span style="width:${pct}%"></span></span></span></div>`}).join('');
-  const recent=today.slice(0,5).map(t=>`<div class="report-list-row"><span>${t.type==='in'?'📥':'📤'}</span><span class="main">${escapeHtml(t.item)}<span class="sub">${escapeHtml(t.user)}${t.destination?' · '+escapeHtml(t.destination):''}</span></span><span class="value" style="color:${t.type==='in'?'var(--green)':'var(--red)'}">${t.type==='in'?'+':'−'}${t.qty}</span></div>`).join('');
+  const recent=today.slice(0,5).map(t=>`<div class="report-list-row"><span>${t.type==='in'?'📥':'📤'}</span><span class="main">${escapeHtml(t.item)}<span class="sub"><span class="report-user-chip">${escapeHtml(t.user)}</span>${t.destination?'<span>📍 '+escapeHtml(t.destination)+'</span>':''}</span></span><span class="value" style="color:${t.type==='in'?'var(--green)':'var(--red)'}">${t.type==='in'?'+':'−'}${t.qty}</span></div>`).join('');
   document.getElementById('reportContent').innerHTML=`<div class="report-hero"><div class="eyebrow">Daily inventory pulse</div><h2>${now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}</h2><p>Updated ${now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})}</p></div><div class="report-metrics"><div class="metric-card in"><div class="metric-value">${inQty}</div><div class="metric-label">Stock in<br>${ins.length} transaction${ins.length===1?'':'s'}</div></div><div class="metric-card out"><div class="metric-value">${outQty}</div><div class="metric-label">Stock out<br>${outs.length} transaction${outs.length===1?'':'s'}</div></div><div class="metric-card alert"><div class="metric-value">${low.length}</div><div class="metric-label">Low-stock<br>alert${low.length===1?'':'s'}</div></div></div><div class="report-section"><h3>📍 Stock issued by destination</h3><div class="report-list">${destRows||'<div class="report-empty">No stock issued today.</div>'}</div></div><div class="report-section"><h3>⚠️ Items needing attention</h3><div class="report-list">${lowRows||'<div class="report-empty">✅ All items are above minimum stock.</div>'}</div></div><div class="report-section"><h3>🕐 Latest movements today</h3><div class="report-list">${recent||'<div class="report-empty">No transactions recorded today.</div>'}</div></div>`;
 }
 async function sendReportTelegram(){

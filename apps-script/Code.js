@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  INVENTORY TRACKER — Google Apps Script Backend  (v1.8.1-codex)
+ *  INVENTORY TRACKER — Google Apps Script Backend  (v1.9.0-codex)
  *  Tabs: users, transactions, catalogue, sites
  * ═══════════════════════════════════════════════════════════════
  */
@@ -21,7 +21,7 @@ var DAILY_REPORT_HOUR  = 18;  // 6 PM — manager can change via setSchedule()
 // sites:        site_name, active
 
 function doGet(e) {
-  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.8.1-codex' });
+  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.9.0-codex' });
 }
 
 function doPost(e) {
@@ -557,7 +557,7 @@ function setup() {
   var hour = dailyHour ? parseInt(dailyHour) : DAILY_REPORT_HOUR;
   ScriptApp.newTrigger('sendDailyReport').timeBased().everyDays(1).atHour(hour).create();
 
-  Logger.log('✅ Setup complete (v1.8.1-codex). Daily EOD trigger at ' + hour + ':00.');
+  Logger.log('✅ Setup complete (v1.9.0-codex). Daily EOD trigger at ' + hour + ':00.');
 }
 
 function seedCCTVCatalogue() {

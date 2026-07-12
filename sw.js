@@ -1,4 +1,4 @@
-const CACHE_NAME = 'inventory-tracker-v1.8.1-codex';
+const CACHE_NAME = 'inventory-tracker-v1.9.0-codex';
 const ASSETS = [
   './',
   './index.html',
