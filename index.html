@@ -839,7 +839,7 @@ function showSuccess(tx, telegramSent) {
     <div class="row">📦 <b>${escapeHtml(tx.item)}</b></div>
     <div class="row">🔢 <span style="color:${color};font-size:28px;font-weight:700;">${sign}${tx.qty}</span></div>
     <div class="row">👤 ${escapeHtml(tx.user)}</div>
-    <div class="row">🕐 ${new Date().toLocaleString()}</div>
+    <div class="row">🕐 ${new Date().toLocaleString('en-GB', {day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})}</div>
     <div class="row" style="margin-top:12px;font-size:14px;color:var(--muted);">${telegramSent ? '📨 Telegram sent' : '⚠️ Telegram not sent'}</div>`;
   showScreen('screen-success');
 }
@@ -1247,7 +1247,7 @@ function escapeHtml(s) { if (s == null) return ''; return String(s).replace(/[&<
 function formatTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
-  return d.toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString('en-GB', {day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit'});
 }
 
 /* ════════════════════════════════════════════════════════════
