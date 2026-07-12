@@ -1,6 +1,6 @@
 /**
  * ═══════════════════════════════════════════════════════════════
- *  INVENTORY TRACKER — Google Apps Script Backend  (v1.8.0-codex)
+ *  INVENTORY TRACKER — Google Apps Script Backend  (v1.8.1-codex)
  *  Tabs: users, transactions, catalogue, sites
  * ═══════════════════════════════════════════════════════════════
  */
@@ -21,7 +21,7 @@ var DAILY_REPORT_HOUR  = 18;  // 6 PM — manager can change via setSchedule()
 // sites:        site_name, active
 
 function doGet(e) {
-  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.8.0-codex' });
+  return jsonOut({ ok: true, message: 'Inventory Tracker backend is running. v1.8.1-codex' });
 }
 
 function doPost(e) {
@@ -222,7 +222,7 @@ function handleOCR(body) {
     var json = JSON.parse(resp.getContentText());
     if (json.error) return { ok: false, error: 'Gemini: ' + json.error.message };
     var text = json.candidates[0].content.parts[0].text;
-    try { text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim(); var parsed = JSON.parse(text); }
+    try { text = text.replace(/```json\n?/g, '').replace(/```/g, '').trim(); var objectMatch = text.match(/\{[\s\S]*?\}/); if (!objectMatch) throw new Error('No JSON object'); var parsed = JSON.parse(objectMatch[0]); }
     catch (e) { return { ok: false, error: 'Could not parse OCR result: ' + text }; }
     return { ok: true, ocr: { item: parsed.item || '', qty: parseInt(parsed.qty) || 1 }, raw: text };
   } catch (err) { return { ok: false, error: 'Gemini request failed: ' + err.toString() }; }
@@ -557,7 +557,7 @@ function setup() {
   var hour = dailyHour ? parseInt(dailyHour) : DAILY_REPORT_HOUR;
   ScriptApp.newTrigger('sendDailyReport').timeBased().everyDays(1).atHour(hour).create();
 
-  Logger.log('✅ Setup complete (v1.8.0-codex). Daily EOD trigger at ' + hour + ':00.');
+  Logger.log('✅ Setup complete (v1.8.1-codex). Daily EOD trigger at ' + hour + ':00.');
 }
 
 function seedCCTVCatalogue() {

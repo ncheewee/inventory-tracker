@@ -147,8 +147,6 @@
   .item-choice .item-choice-name{display:block;margin-top:7px;font-size:12px;font-weight:750;line-height:1.25;overflow-wrap:anywhere}
   .item-choice .item-choice-stock{display:block;margin-top:3px;font-size:10px;color:var(--muted)}
   .item-choice.add-new{border-style:dashed;display:flex;min-height:137px;align-items:center;justify-content:center;text-align:center;color:var(--blue);font-weight:800}
-  #catalogueAddForm{display:none;margin-top:12px}
-  #catalogueAddForm.active{display:block}
 
   /* User rows */
   .user-row{display:flex;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--border)}
@@ -255,7 +253,7 @@
     <button data-key="0">0</button>
     <button data-key="enter" class="enter">✓</button>
   </div>
-  <div class="version">v1.8.0 · CODEX</div>
+  <div class="version">v1.8.1 · CODEX</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -277,7 +275,7 @@
       <button class="mgr-btn" onclick="showReport()"><span class="ico">📨</span><span class="txt">Report</span></button>
     </div>
   </div>
-  <div class="version">v1.8.0 · CODEX</div>
+  <div class="version">v1.8.1 · CODEX</div>
 </div>
 
 <!-- SCREEN: CAMERA -->
@@ -295,7 +293,7 @@
   <img class="photo-thumb" id="photoThumb" alt="captured">
   <div class="field">
     <label>📦 Item</label>
-    <div class="item-picker-grid" id="itemPickerGrid"></div>
+    <button type="button" class="btn btn-secondary" id="chooseItemBtn" onclick="openItemPickerModal()">Choose item</button>
     <input type="hidden" id="itemSelect">
     <input type="text" id="newTransactionItem" placeholder="Enter new item name" style="display:none;margin-top:8px">
   </div>
@@ -315,6 +313,15 @@
   <div class="btn-row">
     <button class="btn btn-secondary" onclick="retakePhoto()">🔄 Retake</button>
     <button class="btn btn-primary" onclick="confirmTransaction()">✅ Confirm</button>
+  </div>
+</div>
+
+<!-- Transaction Item Picker Modal -->
+<div class="modal-overlay" id="itemPickerModal">
+  <div class="modal">
+    <h3>📦 Choose Item</h3>
+    <div class="item-picker-grid" id="itemPickerGrid"></div>
+    <button class="btn btn-secondary" style="margin-top:14px" onclick="closeItemPickerModal()">Cancel</button>
   </div>
 </div>
 
@@ -464,7 +471,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION='v1.8.0-codex';
+const APP_VERSION='v1.8.1-codex';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 const LOW_STOCK_THRESHOLD=20;
 const STOCK_ITEM_PHOTOS={
@@ -615,13 +622,16 @@ async function loadSites(){
 /* ══ VISUAL TRANSACTION ITEM PICKER ══ */
 function populateTransactionItems(preferredName=''){
   const match=catalogueCache.find(c=>c.item_name.toLowerCase()===String(preferredName).trim().toLowerCase());
-  document.getElementById('itemSelect').value=match?match.item_name:(preferredName?'__new__':'');
-  document.getElementById('newTransactionItem').value=match?'':preferredName;
+  const allowNew=currentAction==='in';
+  document.getElementById('itemSelect').value=match?match.item_name:(preferredName&&allowNew?'__new__':'');
+  document.getElementById('newTransactionItem').value=match||!allowNew?'':preferredName;
   renderTransactionItems();toggleNewTransactionItem();
 }
-function renderTransactionItems(){const selected=document.getElementById('itemSelect').value;document.getElementById('itemPickerGrid').innerHTML=catalogueCache.map((c,i)=>{const photo=photoUrlForItem(c);return`<button type="button" class="item-choice${selected===c.item_name?' selected':''}" onclick="chooseTransactionItem(${i})">${photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`:'<span class="placeholder">📦</span>'}<span class="item-choice-name">${escapeHtml(c.item_name)}</span><span class="item-choice-stock">${c.current_qty} ${escapeHtml(c.unit||'')} available</span></button>`}).join('')+`<button type="button" class="item-choice add-new${selected==='__new__'?' selected':''}" onclick="chooseTransactionItem(-1)"><span>➕<br>Add new item</span></button>`}
-function chooseTransactionItem(index){document.getElementById('itemSelect').value=index<0?'__new__':catalogueCache[index].item_name;renderTransactionItems();toggleNewTransactionItem()}
-function toggleNewTransactionItem(){const isNew=document.getElementById('itemSelect').value==='__new__',input=document.getElementById('newTransactionItem');input.style.display=isNew?'block':'none';if(isNew)input.focus()}
+function renderTransactionItems(){const selected=document.getElementById('itemSelect').value,newCard=currentAction==='in'?`<button type="button" class="item-choice add-new${selected==='__new__'?' selected':''}" onclick="chooseTransactionItem(-1)"><span>➕<br>Add new item</span></button>`:'';document.getElementById('itemPickerGrid').innerHTML=catalogueCache.map((c,i)=>{const photo=photoUrlForItem(c);return`<button type="button" class="item-choice${selected===c.item_name?' selected':''}" onclick="chooseTransactionItem(${i})">${photo?`<img src="${escapeHtml(photo)}" alt="" loading="lazy">`:'<span class="placeholder">📦</span>'}<span class="item-choice-name">${escapeHtml(c.item_name)}</span><span class="item-choice-stock">${c.current_qty} ${escapeHtml(c.unit||'')} available</span></button>`}).join('')+newCard}
+function chooseTransactionItem(index){if(index<0&&currentAction!=='in')return;document.getElementById('itemSelect').value=index<0?'__new__':catalogueCache[index].item_name;renderTransactionItems();toggleNewTransactionItem();closeItemPickerModal()}
+function toggleNewTransactionItem(){const selected=document.getElementById('itemSelect').value,isNew=selected==='__new__',input=document.getElementById('newTransactionItem'),button=document.getElementById('chooseItemBtn');input.style.display=isNew?'block':'none';button.textContent=isNew?'➕ New item':selected||'Choose item';if(isNew)input.focus()}
+function openItemPickerModal(){renderTransactionItems();document.getElementById('itemPickerModal').classList.add('active')}
+function closeItemPickerModal(){document.getElementById('itemPickerModal').classList.remove('active')}
 function getTransactionItem(){const selected=document.getElementById('itemSelect').value;return selected==='__new__'?document.getElementById('newTransactionItem').value.trim():selected}
 
 /* ══ CAMERA ══ */
@@ -896,6 +906,7 @@ document.getElementById('demoBanner').style.display=isDemo?'block':'none';
 document.getElementById('editUserModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditUserModal()});
 document.getElementById('editCatModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeEditCatModal()});
 document.getElementById('addCatModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeAddCatModal()});
+document.getElementById('itemPickerModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeItemPickerModal()});
 
 /* PWA */
 if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
