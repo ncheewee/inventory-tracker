@@ -233,7 +233,7 @@
     <button data-key="0">0</button>
     <button data-key="enter" class="enter">✓</button>
   </div>
-  <div class="version">v1.5.0 · CODEX</div>
+  <div class="version">v1.5.1 · CODEX</div>
 </div>
 
 <!-- SCREEN: HOME -->
@@ -255,7 +255,7 @@
       <button class="mgr-btn" onclick="showReport()"><span class="ico">📨</span><span class="txt">Report</span></button>
     </div>
   </div>
-  <div class="version">v1.5.0 · CODEX</div>
+  <div class="version">v1.5.1 · CODEX</div>
 </div>
 
 <!-- SCREEN: CAMERA -->
@@ -434,9 +434,17 @@
 <div class="toast" id="toast"></div>
 
 <script>
-const APP_VERSION='v1.5.0-codex';
+const APP_VERSION='v1.5.1-codex';
 const APPS_SCRIPT_URL='https://script.google.com/macros/s/AKfycbyNjPBLYBOF2RFW1IyqYJ_Mpkoj48GCSYFL27OnlNCXNDtLwofG_HyBKBvotGUFqoPHqw/exec';
 const LOW_STOCK_THRESHOLD=20;
+const STOCK_ITEM_PHOTOS={
+  'cable trunking 25x25mm white':'assets/catalogue/cable-trunking-25x25.jpg',
+  'cable trunking 50x50mm white':'assets/catalogue/cable-trunking-50x50.jpg',
+  'rg59 coaxial cable 100m roll':'assets/catalogue/rg59-coax-roll.jpg',
+  'cctv camera dome 4mp':'assets/catalogue/cctv-dome-camera.jpg',
+  'power supply 12v 10a':'assets/catalogue/power-supply-12v-10a.jpg',
+  'buffered saline':'assets/catalogue/buffered-saline.png'
+};
 
 let currentUser=null,currentUserPin=null,currentAction='in',pinBuffer='',cameraStream=null;
 let capturedBlob=null,capturedDataUrl=null,ocrResult=null,catalogueCache=[],sitesCache=[];
@@ -583,7 +591,7 @@ function filterPicker(){
   const matches=catalogueCache.filter(c=>c.item_name.toLowerCase().includes(query)).slice(0,8);
   if(!matches.length){results.classList.remove('active');return}
   results.innerHTML=matches.map(c=>{
-    const photoUrl=normalisePhotoUrl(c.ref_photo_url);const photo=photoUrl?`<img src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="placeholder" style="display:none;">📦</div>`:`<div class="placeholder">📦</div>`;
+    const photoUrl=photoUrlForItem(c);const photo=photoUrl?`<img src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="placeholder" style="display:none;">📦</div>`:`<div class="placeholder">📦</div>`;
     return `<div class="picker-item" onclick="selectItem('${escapeHtml(c.item_name).replace(/'/g,"\\'")}')">${photo}<div><div class="name">${escapeHtml(c.item_name)}</div><div class="cat">${escapeHtml(c.category||'')} · Stock: ${c.current_qty}</div></div></div>`;
   }).join('');
   results.classList.add('active');
@@ -752,7 +760,7 @@ function renderCatalogue(items){
   const w=document.getElementById('catalogueTable');
   if(!items.length){selectedCatItem=null;updateCatalogueSelection();w.innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items yet.</p>';return}
   if(selectedCatItem&&!items.some(c=>c.item_name===selectedCatItem))selectedCatItem=null;
-  w.innerHTML=items.map(c=>{const low=Number(c.current_qty)<=Number(c.min_qty);const photoUrl=normalisePhotoUrl(c.ref_photo_url);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<button class="catalogue-row${selectedCatItem===c.item_name?' selected':''}" type="button" onclick="selectCatalogueItem('${safeName}')">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span></button>`}).join('');
+  w.innerHTML=items.map(c=>{const low=Number(c.current_qty)<=Number(c.min_qty);const photoUrl=photoUrlForItem(c);const pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;const safeName=escapeHtml(c.item_name).replace(/'/g,"\\'");return`<button class="catalogue-row${selectedCatItem===c.item_name?' selected':''}" type="button" onclick="selectCatalogueItem('${safeName}')">${pc}<span class="catalogue-main"><span class="catalogue-name">${escapeHtml(c.item_name)}</span><span class="catalogue-meta"><span class="cat-badge">${escapeHtml(c.category||'Uncategorized')}</span><span>${escapeHtml(c.unit||'pcs')}</span></span></span><span class="catalogue-stock"><span class="qty badge ${low?'low':'ok'}">${c.current_qty}</span><span class="minimum">Min ${c.min_qty}</span></span></button>`}).join('');
   updateCatalogueSelection();
 }
 function normalisePhotoUrl(url){
@@ -761,6 +769,7 @@ function normalisePhotoUrl(url){
   const driveMatch=value.match(/drive\.google\.com\/(?:file\/d\/|open\?id=|thumbnail\?id=|uc\?(?:export=[^&]+&)?id=)([-\w]+)/i);
   return driveMatch?`https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w400`:value;
 }
+function photoUrlForItem(item){return normalisePhotoUrl(item&&item.ref_photo_url)||STOCK_ITEM_PHOTOS[String(item&&item.item_name||'').trim().toLowerCase()]||''}
 function selectCatalogueItem(itemName){selectedCatItem=selectedCatItem===itemName?null:itemName;renderCatalogue(catalogueCache)}
 function updateCatalogueSelection(){const btn=document.getElementById('editCatalogueBtn'),hint=document.getElementById('catalogueSelectionHint');if(!btn||!hint)return;btn.disabled=!selectedCatItem;hint.textContent=selectedCatItem?'Selected: '+selectedCatItem:'Select an item to edit'}
 function editSelectedCatalogueItem(){if(selectedCatItem)openEditCatModal(selectedCatItem)}
@@ -770,7 +779,7 @@ async function addCatalogueItem(){
   if(!item_name){toast('❌ Enter item name',true);return}
   showOverlay('Adding...');try{const p={op:'add',item_name,category,unit,min_qty,current_qty,pin:getAdminPin()};if(newItemPhotoData)p.ref_photo=newItemPhotoData.split(',')[1];const res=await api('catalogue',p);if(res.ok){document.getElementById('newItemName').value='';document.getElementById('newItemCategory').value='';document.getElementById('newItemQty').value='0';document.getElementById('newItemPhotoPlaceholder').innerHTML='📷';newItemPhotoData=null;document.getElementById('newItemPhotoInput').value='';const l=await api('catalogue');if(l.ok){catalogueCache=l.catalogue;renderCatalogue(l.catalogue)}toast('✅ Item added')}else toast('❌ '+(res.error||'Failed'),true)}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
-function openEditCatModal(itemName){const item=catalogueCache.find(c=>c.item_name===itemName);if(!item)return;editingCatItem=itemName;editCatPhotoData=null;document.getElementById('editCatCategory').value=item.category||'';document.getElementById('editCatUnit').value=item.unit||'';document.getElementById('editCatMinQty').value=item.min_qty;document.getElementById('editCatQty').value=item.current_qty;const ph=document.getElementById('editCatPhotoPlaceholder'),photoUrl=normalisePhotoUrl(item.ref_photo_url);if(photoUrl)ph.innerHTML=`<img src="${escapeHtml(photoUrl)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='📷'">`;else ph.innerHTML='📷';document.getElementById('editCatModal').classList.add('active')}
+function openEditCatModal(itemName){const item=catalogueCache.find(c=>c.item_name===itemName);if(!item)return;editingCatItem=itemName;editCatPhotoData=null;document.getElementById('editCatCategory').value=item.category||'';document.getElementById('editCatUnit').value=item.unit||'';document.getElementById('editCatMinQty').value=item.min_qty;document.getElementById('editCatQty').value=item.current_qty;const ph=document.getElementById('editCatPhotoPlaceholder'),photoUrl=photoUrlForItem(item);if(photoUrl)ph.innerHTML=`<img src="${escapeHtml(photoUrl)}" style="width:60px;height:60px;border-radius:8px;object-fit:cover" referrerpolicy="no-referrer" onerror="this.parentElement.innerHTML='📷'">`;else ph.innerHTML='📷';document.getElementById('editCatModal').classList.add('active')}
 function closeEditCatModal(){editingCatItem=null;editCatPhotoData=null;document.getElementById('editCatModal').classList.remove('active')}
 function handleEditCatPhoto(event){const file=event.target.files[0];if(!file)return;const reader=new FileReader();reader.onload=e=>{editCatPhotoData=e.target.result;document.getElementById('editCatPhotoPlaceholder').innerHTML=`<img src="${e.target.result}" style="width:60px;height:60px;border-radius:8px;object-fit:cover">`};reader.readAsDataURL(file)}
 async function saveEditCat(){
@@ -816,7 +825,7 @@ async function showHistory(){
 /* ══ STOCK LEVELS ══ */
 async function showInventory(){
   showScreen('screen-inventory');showOverlay('Loading...');
-  try{const res=await api('catalogue');if(res.ok){const inv=res.catalogue||[];if(!inv.length){document.getElementById('inventoryTable').innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items.</p>'}else{document.getElementById('inventoryTable').innerHTML=`<table class="data-table"><thead><tr><th></th><th>Item</th><th>Qty</th><th>Min</th><th>Updated</th></tr></thead><tbody>${inv.map(i=>{var low=Number(i.current_qty)<=Number(i.min_qty);var photoUrl=normalisePhotoUrl(i.ref_photo_url);var pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;return`<tr><td>${pc}</td><td style="font-weight:600">${escapeHtml(i.item_name)}<br><span style="font-size:11px;color:var(--muted)">${escapeHtml(i.category||'')} · ${escapeHtml(i.unit||'')}</span></td><td><span class="badge ${low?'low':'ok'}">${i.current_qty}</span>${low?' ⚠️':''}</td><td style="font-size:12px;color:var(--muted)">${i.min_qty}</td><td style="font-size:12px;color:var(--muted)">${formatTime(i.last_updated)}</td></tr>`}).join('')}</tbody></table>`}}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
+  try{const res=await api('catalogue');if(res.ok){const inv=res.catalogue||[];if(!inv.length){document.getElementById('inventoryTable').innerHTML='<p style="padding:16px;text-align:center;color:var(--muted)">No items.</p>'}else{document.getElementById('inventoryTable').innerHTML=`<table class="data-table"><thead><tr><th></th><th>Item</th><th>Qty</th><th>Min</th><th>Updated</th></tr></thead><tbody>${inv.map(i=>{var low=Number(i.current_qty)<=Number(i.min_qty);var photoUrl=photoUrlForItem(i);var pc=photoUrl?`<img class="ref-photo" src="${escapeHtml(photoUrl)}" referrerpolicy="no-referrer" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"><div class="ref-photo-placeholder" style="display:none">📦</div>`:`<div class="ref-photo-placeholder">📦</div>`;return`<tr><td>${pc}</td><td style="font-weight:600">${escapeHtml(i.item_name)}<br><span style="font-size:11px;color:var(--muted)">${escapeHtml(i.category||'')} · ${escapeHtml(i.unit||'')}</span></td><td><span class="badge ${low?'low':'ok'}">${i.current_qty}</span>${low?' ⚠️':''}</td><td style="font-size:12px;color:var(--muted)">${i.min_qty}</td><td style="font-size:12px;color:var(--muted)">${formatTime(i.last_updated)}</td></tr>`}).join('')}</tbody></table>`}}}catch(e){toast('Error: '+e.message,true)}finally{hideOverlay()}
 }
 
 /* ══ REPORT (in-app + Telegram EOD) ══ */
