@@ -48,6 +48,7 @@ function doPost(e) {
   }
 }
 
+
 /* ════════════════════════════════════════════════════════════
    LOGIN
    ════════════════════════════════════════════════════════════ */
@@ -378,11 +379,26 @@ function getOrCreateFolder(name) {
    ════════════════════════════════════════════════════════════ */
 
 function sendTelegram(token, chatId, text) {
-  UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
+  var response = UrlFetchApp.fetch('https://api.telegram.org/bot' + token + '/sendMessage', {
     method: 'post', contentType: 'application/json',
     payload: JSON.stringify({ chat_id: chatId, text: text, parse_mode: 'HTML' }),
     muteHttpExceptions: true
   });
+  var status = response.getResponseCode();
+  var raw = response.getContentText();
+  var result;
+  try {
+    result = JSON.parse(raw);
+  } catch (err) {
+    return { ok: false, error: 'Telegram returned HTTP ' + status + ': ' + raw };
+  }
+  if (status < 200 || status >= 300 || !result.ok) {
+    return {
+      ok: false,
+      error: 'Telegram error ' + (result.error_code || status) + ': ' + (result.description || raw)
+    };
+  }
+  return { ok: true, message_id: result.result && result.result.message_id };
 }
 
 /* ════════════════════════════════════════════════════════════
@@ -413,7 +429,10 @@ function handleReport(body) {
     var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
     var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
     if (!token || !chatId) return { ok: false, error: 'Telegram not configured', report: msg };
-    sendTelegram(token, chatId, msg);
+    var telegramResult = sendTelegram(token, chatId, msg);
+    if (!telegramResult.ok) {
+      return { ok: false, error: telegramResult.error, report: msg };
+    }
     return { ok: true, sent: true, message: 'Daily report sent to Telegram', report: msg };
   }
   // Default: return report text for in-app display
@@ -480,7 +499,10 @@ function sendDailyReport() {
   var msg = generateDailyReport();
   var token = getProp('TELEGRAM_BOT_TOKEN') || TELEGRAM_BOT_TOKEN;
   var chatId = getProp('TELEGRAM_CHAT_ID') || TELEGRAM_CHAT_ID;
-  if (token && chatId) sendTelegram(token, chatId, msg);
+  if (token && chatId) {
+    var telegramResult = sendTelegram(token, chatId, msg);
+    if (!telegramResult.ok) Logger.log(telegramResult.error);
+  }
 }
 
 function handleSchedule(body) {
