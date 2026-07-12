@@ -1,11 +1,11 @@
-item_name,category,unit,min_qty,current_qty
-Cable Trunking 25x25mm White,Trunking,m,50,200
-Cable Trunking 50x50mm White,Trunking,m,30,120
-Cable Trunking 75x50mm White,Trunking,m,20,80
-RG59 Coaxial Cable 100m Roll,Cable,roll,5,18
-Cat6 Cable 305m Box,Cable,box,3,12
-CCTV Camera Dome 4MP,Camera,pcs,10,45
-CCTV Camera Bullet 4MP,Camera,pcs,10,30
-Power Supply 12V 10A,Power,pcs,5,8
-Power Supply 12V 5A,Power,pcs,5,15
-HDD 4TB Surveillance,Storage,pcs,3,6
+item_name,category,unit,min_qty,current_qty,ref_photo_url
+Cable Trunking 25x25mm White,Trunking,m,50,200,https://placehold.co/300x200/2563eb/white?text=Cable+Trunking+25x25
+Cable Trunking 50x50mm White,Trunking,m,30,120,https://placehold.co/300x200/2563eb/white?text=Cable+Trunking+50x50
+Cable Trunking 75x50mm White,Trunking,m,20,80,https://placehold.co/300x200/2563eb/white?text=Cable+Trunking+75x50
+RG59 Coaxial Cable 100m Roll,Cable,roll,5,18,https://placehold.co/300x200/2563eb/white?text=RG59+Cable+Roll
+Cat6 Cable 305m Box,Cable,box,3,12,https://placehold.co/300x200/2563eb/white?text=Cat6+Cable+Box
+CCTV Camera Dome 4MP,Camera,pcs,10,45,https://placehold.co/300x200/2563eb/white?text=CCTV+Dome+4MP
+CCTV Camera Bullet 4MP,Camera,pcs,10,30,https://placehold.co/300x200/2563eb/white?text=CCTV+Bullet+4MP
+Power Supply 12V 10A,Power,pcs,5,8,https://placehold.co/300x200/2563eb/white?text=Power+Supply+12V
+Power Supply 12V 5A,Power,pcs,5,15,https://placehold.co/300x200/2563eb/white?text=Power+Supply+12V+5A
+HDD 4TB Surveillance,Storage,pcs,3,6,https://placehold.co/300x200/2563eb/white?text=HDD+4TB
